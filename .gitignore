@@ -1,0 +1,16 @@
+.gradle/
+build/
+local.properties
+.idea/
+.DS_Store
+*.iml
+# signing keys: never in git (back them up)
+keystore/
+keystore.properties
+site/.npm-cache/
+site/.wrangler/
+site/public/*.apk
+site/public/Daybreak-mac*
+site/public/mac.json
+mac/signing/
+dist/
