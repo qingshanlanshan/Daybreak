@@ -25,7 +25,7 @@ tasks.register<JavaExec>("snapshot") {
     classpath = sourceSets["snapshot"].runtimeClasspath
     mainClass.set("com.qshlab.daybreak.desktop.SnapshotKt")
     args(layout.buildDirectory.dir("snapshots").get().asFile.path)
-    environment("DAYBREAK_HOME", layout.buildDirectory.dir("snapshot-home").get().asFile.path)
+    environment("DAYBREAK_HOME", project.findProperty("home") as String? ?: layout.buildDirectory.dir("snapshot-home").get().asFile.path)
 }
 
 // Development only: `./gradlew -q :desktopApp:synccheck -Phome=<dir> -Pdo="connect|code|join <code>|run"` (see SyncCheck.kt).
@@ -36,13 +36,27 @@ tasks.register<JavaExec>("synccheck") {
     environment("DAYBREAK_HOME", project.findProperty("home") as String? ?: "")
 }
 
+tasks.register<JavaExec>("calcheck") {
+    classpath = sourceSets["snapshot"].runtimeClasspath
+    mainClass.set("com.qshlab.daybreak.desktop.CalCheckKt")
+}
+
+tasks.register<JavaExec>("feedcheck") {
+    classpath = sourceSets["snapshot"].runtimeClasspath
+    mainClass.set("com.qshlab.daybreak.desktop.FeedCheckKt")
+    environment("DAYBREAK_HOME", project.findProperty("home") as String? ?: layout.buildDirectory.dir("feedcheck-home").get().asFile.path)
+    environment("DAYBREAK_CLAUDE_URL", "http://127.0.0.1:9200")
+}
+
 compose.desktop {
     application {
         mainClass = "com.qshlab.daybreak.desktop.MainKt"
         // Release builds go through ProGuard: drops unused code (most of the icon set), keeps the app small.
         buildTypes.release.proguard {
+            version.set("7.10.0")      // reads Kotlin 2.4 metadata (the Claude SDK); the bundled one can't
             configurationFiles.from(project.file("proguard-rules.pro"))
             obfuscate.set(false)
+            optimize.set(false)        // its bytecode optimizations broke Okio (verify error); shrinking alone is enough
         }
         nativeDistributions {
             // Only the Java modules Daybreak uses; keeps the bundled runtime small.

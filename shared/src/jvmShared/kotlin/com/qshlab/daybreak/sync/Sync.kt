@@ -199,6 +199,26 @@ class Sync(private val platform: Platform) {
 
     fun devices(): List<DeviceInfo> = stateFile.readJson<SyncState>()?.devices ?: emptyList()
 
+    @Serializable private data class Lease(val device: String, val until: Long)
+
+    /**
+     * A short lock in the bucket so only one device does a job (e.g. writing the scheduled feed). True if this
+     * device holds it for [seconds]. Always true when sync is off. Call off the main thread.
+     */
+    fun tryLease(name: String, seconds: Long): Boolean {
+        val c = _config.value ?: return true
+        return runCatching {
+            val s3 = client(c); val key = "x/lease-$name"; val now = System.currentTimeMillis()
+            val cur = s3.get(key)?.let { json.decodeFromString<Lease>(String(it)) }
+            if (cur != null && cur.device != c.device && cur.until > now) return false
+            s3.put(key, json.encodeToString(Lease(c.device, now + seconds * 1000)).toByteArray())
+            Thread.sleep(1500)   // another device writing at the same moment: the last write wins, both read it back
+            s3.get(key)?.let { json.decodeFromString<Lease>(String(it)) }?.device == c.device
+        }.getOrDefault(true)   // can't reach the bucket: go ahead rather than skip the update
+    }
+
+    val deviceId: String get() = _config.value?.device ?: deviceId()
+
     // --- encryption
 
     private fun seal(c: SyncConfig, data: ByteArray, aad: String): ByteArray {
@@ -378,6 +398,6 @@ class Sync(private val platform: Platform) {
         private const val CHUNK = 8 shl 20
         private const val INTERVAL_MS = 5 * 60_000L
         /** A folder's defining file: when it's deleted elsewhere, the whole folder goes to the trash here. */
-        private val META = setOf("calendar.json")
+        private val META = setOf("calendar.json", "list.json")
     }
 }

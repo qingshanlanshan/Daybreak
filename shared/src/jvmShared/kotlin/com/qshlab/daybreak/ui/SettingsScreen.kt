@@ -58,6 +58,12 @@ fun SettingsScreen(onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Column(Modifier.widthIn(max = 720.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ClaudeSection()
+            AboutMeSection()
+            ScheduleSection()
+            PlacesSection()
+            EmailSection()
+            SourcesSection()
             SyncSection()
             UpdatesSection()
             Hint("Daybreak ${Daybreak.platform.appVersion} · qshlab", Modifier.padding(top = 24.dp))

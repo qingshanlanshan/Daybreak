@@ -41,7 +41,7 @@ enum class Tab(val label: String, val icon: ImageVector) {
 
 /** Feed · Calendar · Tasks, plus Settings. A bottom bar on phones, a side rail on wide windows (the Mac). */
 @Composable
-fun DaybreakApp(startTab: Tab = Tab.Feed, startInSettings: Boolean = false) {
+fun DaybreakApp(startTab: Tab = Tab.Feed, startInSettings: Boolean = false, calendarView: CalView = CalView.Month) {
     DaybreakTheme {
         var tab by rememberSaveable { mutableStateOf(startTab) }
         var settings by rememberSaveable { mutableStateOf(startInSettings) }
@@ -52,9 +52,9 @@ fun DaybreakApp(startTab: Tab = Tab.Feed, startInSettings: Boolean = false) {
                 val content: @Composable () -> Unit = {
                     if (settings) SettingsScreen(onBack = { settings = false })
                     else when (tab) {
-                        Tab.Feed -> Placeholder("Feed", "Your personal feed: what matters today from your email, calendar, weather and news. Coming in phase 4.") { settings = true }
-                        Tab.Calendar -> Placeholder("Calendar", "Day, week and month views, events and reminders. Coming in phase 2.") { settings = true }
-                        Tab.Tasks -> Placeholder("Tasks", "To-dos and deadlines, also shown on the calendar. Coming in phase 2.") { settings = true }
+                        Tab.Feed -> FeedScreen(onSettings = if (wide) null else ({ settings = true }), openSettings = { settings = true })
+                        Tab.Calendar -> CalendarScreen(onSettings = if (wide) null else ({ settings = true }), startView = calendarView)
+                        Tab.Tasks -> TasksScreen(onSettings = if (wide) null else ({ settings = true }))
                     }
                 }
                 if (wide) Row(Modifier.fillMaxSize()) {
@@ -92,14 +92,5 @@ fun TabScreen(title: String, onSettings: (() -> Unit)? = null, onBack: (() -> Un
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
         content()
-    }
-}
-
-@Composable
-private fun Placeholder(title: String, text: String, onSettings: () -> Unit) {
-    BoxWithConstraints {
-        TabScreen(title, onSettings = if (maxWidth < 720.dp) onSettings else null) {
-            Hint(text, Modifier.padding(24.dp))
-        }
     }
 }

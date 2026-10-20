@@ -30,13 +30,24 @@ kotlin {
                 api(libs.kotlinx.serialization.json)
                 api(libs.okhttp)
                 api(libs.zxing.core)
+                api(libs.anthropic.java)
+                // Mail (IMAP): the javax.mail API here; each platform brings its implementation.
+                compileOnly(libs.javamail)
             }
         }
         androidMain.get().dependsOn(jvmShared)
         androidMain.dependencies {
             implementation(libs.androidx.core.ktx)
             implementation(libs.androidx.activity.compose)
+            implementation(libs.android.mail)
+            implementation(libs.android.activation)
         }
-        val desktopMain by getting { dependsOn(jvmShared) }
+        val desktopMain by getting {
+            dependsOn(jvmShared)
+            dependencies {
+                implementation(libs.javamail)
+                implementation(libs.jakarta.activation)
+            }
+        }
     }
 }

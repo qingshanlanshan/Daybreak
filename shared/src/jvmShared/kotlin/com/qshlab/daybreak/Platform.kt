@@ -19,6 +19,19 @@ interface Platform {
     fun shareText(text: String, title: String) = copyText(text)
     /** Scans a QR code with the camera, or null when this device can't (the Mac). */
     val scanQr: ((onResult: (String?) -> Unit) -> Unit)? get() = null
+    /** Lets the user pick a file; calls back with its name and contents, or null if cancelled. */
+    fun pickFile(onResult: (Pair<String, ByteArray>?) -> Unit)
+    /** Lets the user save [bytes] as a file (Mac: save dialog; Android: choose where). */
+    fun saveFile(name: String, mime: String, bytes: ByteArray, onDone: (Boolean) -> Unit = {})
+    /** Shows a system notification. */
+    fun notify(id: String, title: String, body: String)
+    /** Where this device is: (latitude, longitude), asking for permission if needed. */
+    suspend fun locate(): Result<Pair<Double, Double>>
+    /** Mac: whether Daybreak opens (in the background) when you log in; null where it doesn't apply. */
+    fun openAtLogin(): Boolean? = null
+    fun setOpenAtLogin(on: Boolean) {}
+    /** Clock style for times. */
+    val use24Hour: Boolean get() = !(java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT) as java.text.SimpleDateFormat).toPattern().contains('a')
 }
 
 /** The running app: set up once by the Android Application / the Mac main(). */
@@ -32,5 +45,6 @@ object Daybreak {
         platform = p
         p.home.mkdirs()
         sync = Sync(p).also { it.start() }
+        com.qshlab.daybreak.cal.Cal.ensureDefaults()
     }
 }
