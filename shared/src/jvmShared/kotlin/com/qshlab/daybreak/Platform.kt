@@ -32,6 +32,8 @@ interface Platform {
     fun setOpenAtLogin(on: Boolean) {}
     /** Mail this device reads without an account: Apple Mail (Mac), mail-app notifications (Android). */
     val deviceMail: com.qshlab.daybreak.sources.DeviceMail? get() = null
+    /** Android: asks the launcher to put the month widget on the home screen; null where there's none. */
+    val addWidget: (() -> Unit)? get() = null
     /** Clock style for times. */
     val use24Hour: Boolean get() = !(java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT) as java.text.SimpleDateFormat).toPattern().contains('a')
 }

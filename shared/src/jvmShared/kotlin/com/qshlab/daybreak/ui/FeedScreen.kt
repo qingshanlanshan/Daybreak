@@ -94,7 +94,7 @@ fun FeedScreen(onSettings: (() -> Unit)?, openSettings: () -> Unit) {
 
     TabScreen("Feed", onSettings = onSettings, actions = {
         IconButton({ sources = true }) { Icon(Icons.Default.Source, "What it read") }
-        IconButton({ scope.launch { FeedEngine.refresh() } }, enabled = !st.running && hasKey) { Icon(Icons.Default.Refresh, "Update now") }
+        IconButton({ scope.launch { FeedEngine.update() } }, enabled = !st.running && hasKey) { Icon(Icons.Default.Refresh, "Update now") }
     }) {
         Column(Modifier.fillMaxSize()) {
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 8.dp),
@@ -114,14 +114,15 @@ fun FeedScreen(onSettings: (() -> Unit)?, openSettings: () -> Unit) {
                 st.error?.let { e -> item { Notice("Couldn't update", e) {} } }
                 if (feed == null && hasKey && !st.running) item {
                     Notice("No feed yet", "Tap update to write your first one. Tell Daybreak about yourself below or in Settings → About me, so it knows what matters to you.") {
-                        Button({ scope.launch { FeedEngine.refresh() } }) { Text("Write my feed") }
+                        Button({ scope.launch { FeedEngine.update() } }) { Text("Write my feed") }
                     }
                 }
                 feed?.let { f ->
                     item {
                         Column(Modifier.widthIn(max = 760.dp).fillMaxWidth()) {
                             Text(f.brief, fontSize = 17.sp, lineHeight = 25.sp)
-                            Hint("Updated ${ago(f.generatedAt / 1000.0)}" + (f.focus?.let { " · focus: $it" } ?: "") + " · about $%.2f".format(f.costUsd), Modifier.padding(top = 6.dp))
+                            val by = remember(f.device, version) { if (f.device == Daybreak.sync.deviceId) null else Daybreak.sync.devices().firstOrNull { d -> d.id == f.device }?.name }
+                            Hint("Updated ${ago(f.generatedAt / 1000.0)}" + (by?.let { " on $it" } ?: "") + (f.focus?.let { " · focus: $it" } ?: "") + " · about $%.2f".format(f.costUsd), Modifier.padding(top = 6.dp))
                         }
                     }
                     // Cards about one of your places come after the others, under the place's name, in your order of places.

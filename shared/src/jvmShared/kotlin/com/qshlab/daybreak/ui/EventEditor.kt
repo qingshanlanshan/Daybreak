@@ -1,5 +1,7 @@
 package com.qshlab.daybreak.ui
 
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -79,7 +81,9 @@ fun Sheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
         val wide = maxWidth > 700.dp
         Surface(Modifier.then(if (wide) Modifier.widthIn(max = 560.dp).heightIn(max = maxHeight - 48.dp).clip(RoundedCornerShape(16.dp)) else Modifier.fillMaxSize())
             .clickable(remember { MutableInteractionSource() }, null) {}, color = MaterialTheme.colorScheme.surface) {
-            Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+            // Full screen on a phone: keep clear of the status bar, the navigation bar and the keyboard.
+            Column(Modifier.then(if (wide) Modifier else Modifier.windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing))
+                .verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
         }
     }
 }

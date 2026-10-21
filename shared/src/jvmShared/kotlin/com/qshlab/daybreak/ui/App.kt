@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -34,6 +35,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+
+/** Requests from outside the app (Android's home-screen widget): add a task due on a day, or show the calendar. */
+object Launch {
+    val newTaskOn = kotlinx.coroutines.flow.MutableStateFlow<java.time.LocalDate?>(null)
+    val openCalendar = kotlinx.coroutines.flow.MutableStateFlow(false)
+}
 
 enum class Tab(val label: String, val icon: ImageVector) {
     Feed("Feed", Icons.Default.WbSunny), Calendar("Calendar", Icons.Default.CalendarMonth), Tasks("Tasks", Icons.Default.CheckCircle)
@@ -47,6 +54,12 @@ fun DaybreakApp(startTab: Tab = Tab.Feed, startInSettings: Boolean = false, cale
         var settings by rememberSaveable { mutableStateOf(startInSettings) }
         var settingsStart by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
         BackHandler(settings) { settings = false }
+        val newTaskOn by Launch.newTaskOn.collectAsState()
+        val openCalendar by Launch.openCalendar.collectAsState()
+        androidx.compose.runtime.LaunchedEffect(newTaskOn, openCalendar) {
+            if (newTaskOn != null) { tab = Tab.Tasks; settings = false }
+            if (openCalendar) { tab = Tab.Calendar; settings = false; Launch.openCalendar.value = false }
+        }
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             BoxWithConstraints {
                 val wide = maxWidth >= 720.dp
@@ -73,6 +86,13 @@ fun DaybreakApp(startTab: Tab = Tab.Feed, startInSettings: Boolean = false, cale
                         for (t in Tab.entries) NavigationBarItem(selected = tab == t, onClick = { tab = t },
                             icon = { Icon(t.icon, null) }, label = { Text(t.label) })
                     }
+                }
+                newTaskOn?.let { day ->
+                    val ref = androidx.compose.runtime.remember(day) {
+                        com.qshlab.daybreak.cal.TaskRef(com.qshlab.daybreak.cal.Cal.DEFAULT_LIST, com.qshlab.daybreak.cal.newId(), com.qshlab.daybreak.cal.Task("", due = day.toString()))
+                    }
+                    // Drawn over the tabs.
+                    androidx.compose.runtime.key(day) { Box(Modifier.fillMaxSize()) { TaskEditor(ref, onDone = { Launch.newTaskOn.value = null }, isNew = true) } }
                 }
             }
         }

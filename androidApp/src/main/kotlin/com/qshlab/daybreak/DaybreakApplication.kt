@@ -22,7 +22,10 @@ class DaybreakApplication : Application() {
         FeedAlarms.schedule(this)
         // Re-plan reminders a moment after data changes (edits here or from sync).
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
-            com.qshlab.daybreak.data.Changes.version.drop(1).debounce(2000).collect { Alarms.reschedule(this@DaybreakApplication); FeedAlarms.schedule(this@DaybreakApplication) }
+            com.qshlab.daybreak.data.Changes.version.drop(1).debounce(2000).collect {
+                Alarms.reschedule(this@DaybreakApplication); FeedAlarms.schedule(this@DaybreakApplication)
+                MonthWidget.refresh(this@DaybreakApplication)   // the home-screen month shows events and due tasks
+            }
         }
     }
 }
@@ -35,6 +38,10 @@ class AndroidPlatform(private val app: Application) : Platform {
     override val appVersion: String = app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "?"
     override val updater = AndroidUpdater(app)
     override val deviceMail = NotificationMail(app)
+    override val addWidget: (() -> Unit) = {
+        val awm = android.appwidget.AppWidgetManager.getInstance(app)
+        if (awm.isRequestPinAppWidgetSupported) awm.requestPinAppWidget(android.content.ComponentName(app, MonthWidgetReceiver::class.java), null, null)
+    }
 
     /** Set by the activity while it's open (the camera scanner and file pickers need it). */
     var scanner: (((String?) -> Unit) -> Unit)? = null
@@ -59,8 +66,11 @@ class AndroidPlatform(private val app: Application) : Platform {
             if (!ok) error("Location is off for Daybreak. Allow it in Android settings, or add your city in Settings → Places.")
         }
         val lm = app.getSystemService(android.location.LocationManager::class.java)
-        val providers = listOf(android.location.LocationManager.NETWORK_PROVIDER, android.location.LocationManager.GPS_PROVIDER,
-            android.location.LocationManager.PASSIVE_PROVIDER).filter { runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) }
+        // "fused" (Android 12+) is what most phones answer fastest with; then Wi-Fi/cell, GPS, and other apps' fixes.
+        val all = lm.allProviders
+        val providers = ((if (Build.VERSION.SDK_INT >= 31) listOf(android.location.LocationManager.FUSED_PROVIDER) else emptyList()) +
+            listOf(android.location.LocationManager.NETWORK_PROVIDER, android.location.LocationManager.GPS_PROVIDER, android.location.LocationManager.PASSIVE_PROVIDER))
+            .filter { it in all && runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) }
         if (providers.isEmpty()) error("Location services are off.")
         var loc: android.location.Location? = null
         if (Build.VERSION.SDK_INT >= 30) for (p in providers) {

@@ -57,7 +57,7 @@ data class Batch(val v: Int = 1, val changes: List<Change>)
 data class LocalFile(val s: Long = 0, val m: Long = 0, val c: List<String> = emptyList(), val t: Long, val d: String, val x: Boolean = false)
 
 @Serializable
-data class DeviceInfo(val name: String, val platform: String, val seen: Double, val me: Boolean = false)
+data class DeviceInfo(val name: String, val platform: String, val seen: Double, val me: Boolean = false, val id: String = "")
 
 @Serializable
 data class SyncState(
@@ -239,6 +239,24 @@ class Sync(private val platform: Platform) {
         }.getOrDefault(false)
     }
 
+    @Serializable private data class FeedRequest(val device: String, val at: Long)
+
+    /** The phone asks your Mac to write the feed now (the Mac has Apple Mail). Returns when it asked. */
+    fun requestFeed(): Long {
+        val c = _config.value ?: return 0
+        val now = System.currentTimeMillis()
+        runCatching { client(c).put("x/request-feed", seal(c, json.encodeToString(FeedRequest(c.device, now)).toByteArray(), "x/request-feed")) }
+        return now
+    }
+
+    /** Mac: when another device last asked for a feed (null: never, or sync is off). Call off the main thread. */
+    fun feedRequest(): Long? {
+        val c = _config.value ?: return null
+        return runCatching {
+            client(c).get("x/request-feed")?.let { json.decodeFromString<FeedRequest>(String(open(c, it, "x/request-feed"))) }?.takeIf { it.device != c.device }?.at
+        }.getOrNull()
+    }
+
     val deviceId: String get() = _config.value?.device ?: deviceId()
 
     // --- encryption
@@ -409,7 +427,7 @@ class Sync(private val platform: Platform) {
             st.listed = now
             // Devices not seen for 60 days (e.g. before a reinstall) drop off the list.
             st.devices = s3.list("d/").first.mapNotNull { key ->
-                s3.get(key)?.let { json.decodeFromString<DeviceInfo>(String(open(c, it, key))).copy(me = key == "d/$me") }
+                s3.get(key)?.let { json.decodeFromString<DeviceInfo>(String(open(c, it, key))).copy(me = key == "d/$me", id = key.removePrefix("d/")) }
             }.filter { it.me || now - it.seen < 60 * 86400 }.sortedWith(compareBy({ !it.me }, { it.name }))
         }
         save()

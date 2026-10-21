@@ -51,6 +51,16 @@ class MainActivity : ComponentActivity() {
         if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0)
             intent.getStringExtra("syncCode")?.let { code -> Thread { android.util.Log.i("DaybreakSync", runCatching { Daybreak.sync.join(code); "joined" }.getOrElse { it.message ?: "failed" }) }.start() }
         setContent { DaybreakApp() }
+        fromWidget(intent)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) { super.onNewIntent(intent); fromWidget(intent) }
+
+    /** The home-screen widget: a tapped day starts a new task due then; the month name opens the calendar. */
+    private fun fromWidget(i: android.content.Intent?) {
+        i?.getStringExtra(EXTRA_NEW_TASK)?.let { d -> runCatching { java.time.LocalDate.parse(d) }.getOrNull()?.let { com.qshlab.daybreak.ui.Launch.newTaskOn.value = it } }
+        if (i?.getStringExtra(EXTRA_OPEN) == "calendar") com.qshlab.daybreak.ui.Launch.openCalendar.value = true
+        i?.removeExtra(EXTRA_NEW_TASK); i?.removeExtra(EXTRA_OPEN)
     }
 
     override fun onStart() { super.onStart(); Daybreak.sync.kick() }

@@ -20,7 +20,8 @@ data class PlaceList(val places: List<Place> = listOf(Place("here", "Current loc
 
 /** Where this device is now (not synced: each device has its own). */
 @Serializable
-data class Here(val name: String, val lat: Double, val lon: Double, val country: String = "", val countryCode: String = "", val at: Long = 0)
+data class Here(val name: String, val lat: Double, val lon: Double, val country: String = "", val countryCode: String = "", val at: Long = 0,
+                val approx: Boolean = false)    // from the internet connection (the device couldn't say)
 
 object Places {
     private val file get() = File(Daybreak.platform.home, "feed/places.json")
@@ -46,12 +47,19 @@ object Places {
                 listOf(s("admin1"), s("country")).filter { it.isNotBlank() && it != s("name") }.joinToString(", "), s("country_code"))
         }
 
-    /** Asks the device where it is (with its permission) and names the place. Call off the main thread. */
+    /**
+     * Asks the device where it is (with its permission) and names the place. When the device can't say (the Mac;
+     * a phone with location off or out of reach), the city comes from the internet connection instead (approximate).
+     * Call off the main thread.
+     */
     suspend fun locate(): Result<Here> = runCatching {
-        val (lat, lon) = Daybreak.platform.locate().getOrThrow()
-        val r = runCatching { Http.jsonOf("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=$lat&longitude=$lon&localityLanguage=en").jsonObject }.getOrNull()
+        val exact = Daybreak.platform.locate()
+        val base = "https://api-bdc.io/data/reverse-geocode-client?localityLanguage=en"
+        val r = runCatching { Http.jsonOf(exact.getOrNull()?.let { (lat, lon) -> "$base&latitude=$lat&longitude=$lon" } ?: base).jsonObject }.getOrNull()
         fun s(k: String) = r?.get(k)?.jsonPrimitive?.content.orEmpty()
+        val (lat, lon) = exact.getOrNull() ?: (s("latitude").toDoubleOrNull() ?: throw exact.exceptionOrNull()!!) to s("longitude").toDouble()
         val name = s("city").ifBlank { s("locality") }.ifBlank { s("principalSubdivision") }.ifBlank { "%.2f, %.2f".format(lat, lon) }
-        Here(name, lat, lon, s("countryName"), s("countryCode"), System.currentTimeMillis()).also { hereFile.writeJson(it); Changes.bump() }
+        Here(name, lat, lon, s("countryName"), s("countryCode"), System.currentTimeMillis(), approx = exact.isFailure)
+            .also { hereFile.writeJson(it); Changes.bump() }
     }
 }

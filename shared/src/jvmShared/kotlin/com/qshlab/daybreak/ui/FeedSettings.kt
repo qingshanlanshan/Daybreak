@@ -207,7 +207,8 @@ fun PlacesSection() {
     for (p in places) Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(if (p.current) "📍 Current location" else p.name)
-            Hint(if (p.current) here?.let { "Now: ${it.name}" + (it.country.takeIf { c -> c.isNotBlank() }?.let { c -> ", $c" } ?: "") } ?: "Not known yet" else p.country)
+            Hint(if (p.current) here?.let { "Now: ${it.name}" + (it.country.takeIf { c -> c.isNotBlank() }?.let { c -> ", $c" } ?: "") +
+                (if (it.approx) " (approximate, from your internet connection)" else "") } ?: "Not known yet" else p.country)
         }
         if (p.current) TextButton({ scope.launch { msg = withContext(Dispatchers.IO) { Places.locate() }.fold({ "You're in ${it.name}." }, { it.message }) } }) { Text("Update") }
         TextButton({ Places.save(places - p) }) { Text("Remove") }

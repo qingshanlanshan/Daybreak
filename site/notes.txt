@@ -1,1 +1,1 @@
-Daybreak 1.0.4: sources as small gray footnotes with the outlet's name; quieter 👍/👎 buttons.
+Daybreak 1.0.5: home-screen month widget on Android (tap a day to add a task); your phone asks your Mac for the feed first; location fixed (approximate from your internet connection when the device can't say).

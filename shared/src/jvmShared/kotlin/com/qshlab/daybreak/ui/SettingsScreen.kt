@@ -105,6 +105,16 @@ fun SettingsScreen(onBack: () -> Unit, start: SettingsPage? = null) {
                     }
                     HorizontalDivider(Modifier.padding(horizontal = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 }
+                Daybreak.platform.addWidget?.let { add ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { add() }.padding(horizontal = 8.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Home screen widget", fontWeight = FontWeight.SemiBold)
+                            Hint("Add the month to your home screen; tap a day there to add a task")
+                        }
+                        Text("+", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 22.sp)
+                    }
+                }
                 Hint("Daybreak ${Daybreak.platform.appVersion} · qshlab", Modifier.padding(start = 8.dp, top = 24.dp))
             }
         }

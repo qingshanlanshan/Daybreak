@@ -42,3 +42,10 @@
 -keepclasseswithmembers class com.qshlab.daybreak.** { kotlinx.serialization.KSerializer serializer(...); }
 -keepclassmembers class com.qshlab.daybreak.** { *** Companion; }
 -dontwarn okhttp3.internal.**
+
+# The home-screen widget (Glance) uses WorkManager, which creates its Room database by reflection.
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keep class androidx.work.impl.WorkDatabase_Impl { *; }
+# WorkManager also creates its input mergers and workers (Glance draws widgets in one) by class name.
+-keep class * extends androidx.work.InputMerger { <init>(); }
+-keep class * extends androidx.work.ListenableWorker { <init>(android.content.Context, androidx.work.WorkerParameters); }

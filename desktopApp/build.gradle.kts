@@ -84,3 +84,11 @@ tasks.register<JavaExec>("mailmergecheck") {
     mainClass.set("com.qshlab.daybreak.desktop.MailMergeCheckKt")
     environment("DAYBREAK_HOME", layout.buildDirectory.dir("mailmerge-home").get().asFile.path)
 }
+
+tasks.register<JavaExec>("requestcheck") {
+    classpath = sourceSets["snapshot"].runtimeClasspath
+    mainClass.set("com.qshlab.daybreak.desktop.requestcheck.RequestCheckKt")
+    args(project.findProperty("mode") as String? ?: "phone")
+    environment("DAYBREAK_HOME", project.findProperty("home") as String? ?: "")
+    environment("DAYBREAK_CLAUDE_URL", "http://127.0.0.1:9200")
+}

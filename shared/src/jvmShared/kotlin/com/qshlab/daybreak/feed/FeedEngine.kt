@@ -199,6 +199,42 @@ object FeedEngine {
         }
     }
 
+    /**
+     * The update button. On the phone (with sync on), your Mac goes first, since it reads Apple Mail: a feed it wrote
+     * in the last 15 minutes is used as it is; otherwise, if the Mac is awake, it's asked to write one (up to 3
+     * minutes); only then does the phone write it itself.
+     */
+    suspend fun update(): Result<FeedResult> {
+        if (Daybreak.platform.kind == "mac" || Daybreak.sync.config.value == null) return refresh()
+        val fresh = { since: Long -> current()?.takeIf { it.generatedAt >= since && it.device != Daybreak.sync.deviceId } }
+        val before = System.currentTimeMillis()
+        _state.value = EngineState(true, "Looking for a newer feed from your Mac…")
+        withContext(Dispatchers.IO) { runCatching { Daybreak.sync.runOnce() } }
+        fresh(before - 15 * 60_000L)?.let { _state.value = EngineState(false, ""); changed(); return Result.success(it) }
+        if (withContext(Dispatchers.IO) { Daybreak.sync.macAwake() }) {
+            _state.value = EngineState(true, "Asking your Mac to update the feed…")
+            val asked = withContext(Dispatchers.IO) { Daybreak.sync.requestFeed() }
+            repeat(36) {
+                kotlinx.coroutines.delay(5_000)
+                withContext(Dispatchers.IO) { runCatching { Daybreak.sync.runOnce() } }
+                fresh(asked)?.let { _state.value = EngineState(false, ""); changed(); return Result.success(it) }
+            }
+        }
+        return refresh()
+    }
+
+    /** Mac: write the feed when another device asked for it (checked every 20 s). */
+    suspend fun answerRequests() {
+        var handled = System.currentTimeMillis()
+        while (true) {
+            kotlinx.coroutines.delay(20_000)
+            val at = withContext(Dispatchers.IO) { Daybreak.sync.feedRequest() } ?: continue
+            if (at <= handled) continue
+            handled = at
+            if (System.currentTimeMillis() - at < 5 * 60_000L && (current()?.generatedAt ?: 0) < at && Claude.key != null) refresh()
+        }
+    }
+
     /** Mail since the last feed (a little overlap), at most three days back. */
     private fun since(): Instant {
         val last = current()?.sourcesAt?.takeIf { it > 0 } ?: 0

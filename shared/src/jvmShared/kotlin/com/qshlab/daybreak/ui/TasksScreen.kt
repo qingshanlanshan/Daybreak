@@ -1,5 +1,6 @@
 package com.qshlab.daybreak.ui
 
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -202,7 +203,7 @@ fun TaskRow(t: TaskRef, listColor: String?, onOpen: () -> Unit) {
 }
 
 @Composable
-fun TaskEditor(ref: TaskRef, onDone: () -> Unit) {
+fun TaskEditor(ref: TaskRef, onDone: () -> Unit, isNew: Boolean = false) {
     val lists = remember { Cal.lists() }
     val t0 = ref.task
     var title by remember { mutableStateOf(t0.title) }
@@ -220,8 +221,10 @@ fun TaskEditor(ref: TaskRef, onDone: () -> Unit) {
         onDone()
     }
     Sheet(onDone) {
-        Text("Task", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-        OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Title") })
+        Text(if (isNew) "New task" else "Task", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        val focus = androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }
+        OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth().focusRequester(focus), label = { Text("Title") })
+        if (isNew) androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
         OutlinedTextField(notes, { notes = it }, Modifier.fillMaxWidth(), label = { Text("Notes") }, minLines = 2)
         Row(verticalAlignment = Alignment.CenterVertically) { Text("Due date", Modifier.weight(1f)); Switch(hasDue, { hasDue = it }) }
         if (hasDue) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -234,10 +237,13 @@ fun TaskEditor(ref: TaskRef, onDone: () -> Unit) {
         remind?.let { r -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { DateField(r.toLocalDate(), { remind = it.atTime(r.toLocalTime()) }); TimeField(r.toLocalTime(), { remind = r.toLocalDate().atTime(it) }) } }
         Menu("List", lists.firstOrNull { it.id == list }?.meta?.name ?: "", lists.map { l -> l.meta.name to { list = l.id } }, dot = lists.firstOrNull { it.id == list }?.meta?.color)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(::save) { Text("Save") }
-            TextButton({ Cal.setDone(ref, !t0.done); onDone() }) { Text(if (t0.done) "Mark not done" else "Mark done") }
-            Spacer(Modifier.weight(1f))
-            TextButton({ confirm = true }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            Button(::save, enabled = !isNew || title.isNotBlank()) { Text(if (isNew) "Add" else "Save") }
+            if (isNew) TextButton(onDone) { Text("Cancel") }
+            else {
+                TextButton({ Cal.setDone(ref, !t0.done); onDone() }) { Text(if (t0.done) "Mark not done" else "Mark done") }
+                Spacer(Modifier.weight(1f))
+                TextButton({ confirm = true }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            }
         }
     }
     if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("Delete “${t0.title}”?") },

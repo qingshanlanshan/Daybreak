@@ -12,8 +12,8 @@ android {
         applicationId = "com.qshlab.daybreak"
         minSdk = 29
         targetSdk = 37
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.0.5"
     }
     buildFeatures { compose = true }
     packaging {
@@ -49,6 +49,7 @@ android {
 dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.glance)
     implementation(libs.androidx.core.ktx)
     implementation(libs.zxing.embedded)
 }

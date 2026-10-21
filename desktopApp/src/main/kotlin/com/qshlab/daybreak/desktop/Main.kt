@@ -43,7 +43,8 @@ class MacPlatform : Platform {
 
     override fun notify(id: String, title: String, body: String) { notifier.show(id, title, body) }
 
-    override suspend fun locate(): Result<Pair<Double, Double>> = notifier.location()
+    /** macOS doesn't let Daybreak ask for location (its helper can't show the prompt): the city comes from the internet connection. */
+    override suspend fun locate(): Result<Pair<Double, Double>> = Result.failure(IllegalStateException("The Mac uses your internet connection's location."))
 
     private val agent = File(System.getProperty("user.home"), "Library/LaunchAgents/com.qshlab.daybreak.plist")
     override fun openAtLogin(): Boolean? = if (bundle == null) null else agent.exists()
@@ -116,6 +117,8 @@ fun main(args: Array<String>) {
             kotlinx.coroutines.delay(60_000)
         }
     }
+    // Your phone can ask this Mac to write the feed (it has Apple Mail).
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { com.qshlab.daybreak.feed.FeedEngine.answerRequests() }
     Thread { runBlocking { Updates.check() } }.start()
     application {
         // Closing the window keeps Daybreak running (reminders, the scheduled feed); the Dock icon brings it back.
