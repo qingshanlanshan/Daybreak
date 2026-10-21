@@ -1,0 +1,11 @@
+// Cloudflare Workers config: the download page and update feeds as static files, plus a small Worker
+// (worker.js) that joins files published in parts. Published from this Mac with ./deploy.sh.
+{
+  "name": "daybreak",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-18",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  // Cloudflare creates the DNS record and certificate for the custom domain.
+  "routes": [{ "pattern": "daybreak.qshlab.com", "custom_domain": true }],
+  "workers_dev": false,
+}

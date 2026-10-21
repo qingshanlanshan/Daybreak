@@ -4,7 +4,7 @@ A personal assistant for Android and Mac: a calendar with tasks, and an AI feed 
 (your email, weather, local news, calendar), personalized by talking to it. Everything syncs between your
 devices through your own Cloudflare R2 storage, end-to-end encrypted.
 
-Status: phase 1 (foundations) done. Next: calendar & tasks, sources, AI feed, release.
+Published at https://daybreak.qshlab.com (Android + Mac, in-app updates).
 
 ## Code
 
@@ -22,6 +22,12 @@ Kotlin + Compose Multiplatform, one code base:
 ./gradlew :androidApp:assembleDebug    # Android debug APK
 sh mac/build.sh                        # signed Daybreak.app, dmg, update zip, mac.json in dist/
 ```
+
+Release: bump `versionCode`/`versionName` in `androidApp/build.gradle.kts` and `mac/VERSION`, write `site/notes.txt`,
+then `./gradlew :androidApp:assembleRelease && sh mac/build.sh && site/deploy.sh`. The Mac files are over
+Cloudflare's 25 MiB per-file limit, so `deploy.sh` uploads them in 16 MiB parts and `site/worker.js` joins them on
+download. `./gradlew :desktopApp:updatecheck -Papp=<copy of an older Daybreak.app> -Pversion=<its version>` runs the
+real Mac updater against the live site.
 
 Data: `~/Library/Application Support/Daybreak` on the Mac, the app's private storage on Android. Everything
 there syncs except `.sync/` and `local/` (this device's own state).

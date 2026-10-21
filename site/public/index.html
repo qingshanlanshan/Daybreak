@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Daybreak · calendar and personal feed</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="icon.svg">
+  <style>
+    :root { --bg: #f6f7f9; --ink: #1b2130; --muted: #626b7d; --accent: #3f51d1; --card: #fff; --line: #e1e5ec; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #121419; --ink: #e5e8ee; --muted: #949cad; --accent: #8b9bff; --card: #1a1d24; --line: #2a2e38; } }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 560px; margin: 0 auto; padding: 48px 16px 64px; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand img { width: 52px; height: 52px; }
+    h1 { font: 650 30px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; letter-spacing: -0.01em; margin: 0; }
+    p { color: var(--muted); }
+    .btn { display: inline-block; margin: 14px 0 6px; padding: 13px 22px; border-radius: 10px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; }
+    h2 { font: 600 21px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 36px 0 0; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px 18px; margin-top: 22px; }
+    li { margin: 6px 0; }
+    small { color: var(--muted); }
+  </style>
+</head>
+<body>
+<main>
+  <div class="brand"><img src="icon.svg" alt=""><h1>Daybreak</h1></div>
+  <p>A calendar with tasks and reminders, and a personal feed: Claude reads your weather, local news, email and calendar and tells you what matters to you today. Tell it what to focus on, and it learns.</p>
+  <div class="card">
+    <ul>
+      <li>Calendar with day, week and month views, repeating events and reminders; imports and exports standard .ics files.</li>
+      <li>Tasks with deadlines, and notes or reminders without one.</li>
+      <li>The feed uses Claude with your own API key. You choose how often it updates (each update costs a little) and when it notifies you.</li>
+      <li>Email is read-only: Gmail (with an app password), other IMAP mail, or Outlook.</li>
+      <li>Optional: keep your Mac and phone in sync through your own Cloudflare R2 storage, encrypted so only your devices can read it.</li>
+    </ul>
+  </div>
+
+  <h2>Mac</h2>
+  <a class="btn" href="/mac">Download for Mac</a>
+  <div><small id="macver">Apple Silicon (M1 or newer) · macOS 13 or newer</small></div>
+  <div class="card">
+    <ul>
+      <li>Open the downloaded file and drag Daybreak into Applications.</li>
+      <li>The first time you open it, macOS says it can't check the developer. Click Done, then go to System Settings → Privacy &amp; Security and click <b>Open Anyway</b>. This is needed only once.</li>
+      <li>Updates: Daybreak checks for new versions and offers them in the app (Settings → Updates).</li>
+    </ul>
+  </div>
+
+  <h2>Android</h2>
+  <a class="btn" href="/download">Download for Android</a>
+  <div><small id="ver">Android 10 or newer</small></div>
+  <div class="card">
+    <ul>
+      <li>Allow your browser to install apps when Android asks, then open the downloaded file.</li>
+      <li>Updates: Daybreak checks this page and offers new versions in the app (Settings → Updates).</li>
+    </ul>
+  </div>
+</main>
+<script>
+  fetch("android.json", { cache: "no-store" }).then((r) => r.json()).then((v) => {
+    document.getElementById("ver").textContent = `Version ${v.version} · ${(v.size / 1048576).toFixed(1)} MB · Android 10 or newer`;
+  }).catch(() => {});
+  fetch("mac.json", { cache: "no-store" }).then((r) => r.json()).then((v) => {
+    document.getElementById("macver").textContent = `Version ${v.version} · Apple Silicon · macOS 13 or newer`;
+  }).catch(() => {});
+</script>
+</body>
+</html>

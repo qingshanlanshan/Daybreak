@@ -14,3 +14,5 @@ site/public/Daybreak-mac*
 site/public/mac.json
 mac/signing/
 dist/
+site/public/android.json
+site/public/_redirects

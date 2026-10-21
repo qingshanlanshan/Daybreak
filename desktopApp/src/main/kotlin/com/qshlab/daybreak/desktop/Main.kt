@@ -82,7 +82,7 @@ fun main(args: Array<String>) {
     if ("--selfcheck" in args) {   // diagnostics: write the feed once, report, quit
         val r = runBlocking { com.qshlab.daybreak.feed.FeedEngine.refresh() }
         val c = com.qshlab.daybreak.feed.FeedEngine.collected()
-        File(platform.home, "local/selfcheck.txt").writeText(r.fold({ "ok: ${it.brief} (${it.cards.size} cards)" }, { "error: " + it.stackTraceToString().take(3000) }) +
+        File(platform.home, "local/selfcheck.txt").apply { parentFile.mkdirs() }.writeText(r.fold({ "ok: ${it.brief} (${it.cards.size} cards)" }, { "error: " + it.stackTraceToString().take(3000) }) +
             "\nread: weather=${c?.weather?.size} news=${c?.news?.size} mail=${c?.mail?.size} errors=${c?.errors}\n")
         kotlin.system.exitProcess(0)
     }

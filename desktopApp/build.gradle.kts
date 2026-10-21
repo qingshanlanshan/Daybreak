@@ -71,3 +71,10 @@ compose.desktop {
         }
     }
 }
+
+// Development only: `./gradlew -q :desktopApp:updatecheck -Papp=<copy of Daybreak.app> -Pversion=<its version>` (see UpdateCheck.kt).
+tasks.register<JavaExec>("updatecheck") {
+    classpath = sourceSets["snapshot"].runtimeClasspath
+    mainClass.set("com.qshlab.daybreak.desktop.UpdateCheckKt")
+    args(project.findProperty("app") as String? ?: "", project.findProperty("version") as String? ?: "")
+}
