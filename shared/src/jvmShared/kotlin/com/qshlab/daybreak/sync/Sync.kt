@@ -217,6 +217,28 @@ class Sync(private val platform: Platform) {
         }.getOrDefault(true)   // can't reach the bucket: go ahead rather than skip the update
     }
 
+    @Serializable private data class Awake(val device: String, val at: Long)
+    private var awakeSaid = 0L
+
+    /**
+     * The Mac says it's awake (every sync, at most every 5 minutes), so the phone leaves the scheduled feed to it:
+     * the Mac reads Apple Mail, the phone can't.
+     */
+    private fun sayAwake(s3: S3, c: SyncConfig) {
+        if (platform.kind != "mac" || System.currentTimeMillis() - awakeSaid < 4 * 60_000L) return
+        runCatching { s3.put("x/awake-mac", seal(c, json.encodeToString(Awake(c.device, System.currentTimeMillis())).toByteArray(), "x/awake-mac")) }
+            .onSuccess { awakeSaid = System.currentTimeMillis() }
+    }
+
+    /** Whether one of your Macs (not this device) said it was awake in the last [minutes]. Call off the main thread. */
+    fun macAwake(minutes: Long = 15): Boolean {
+        val c = _config.value ?: return false
+        return runCatching {
+            val a = client(c).get("x/awake-mac")?.let { json.decodeFromString<Awake>(String(open(c, it, "x/awake-mac"))) } ?: return false
+            a.device != c.device && System.currentTimeMillis() - a.at < minutes * 60_000L
+        }.getOrDefault(false)
+    }
+
     val deviceId: String get() = _config.value?.device ?: deviceId()
 
     // --- encryption
@@ -377,6 +399,7 @@ class Sync(private val platform: Platform) {
         }
 
         // 4. this device (said once a day), and the list of devices for Settings
+        sayAwake(s3, c)
         val now = System.currentTimeMillis() / 1000.0
         if (now - st.announced > 86400) {
             s3.put("d/$me", seal(c, json.encodeToString(DeviceInfo(c.name, platform.kind, now)).toByteArray(), "d/$me"))

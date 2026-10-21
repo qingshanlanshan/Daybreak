@@ -33,12 +33,13 @@ fun main(@Suppress("UNUSED_PARAMETER") args: Array<String>): Unit = runBlocking 
     println("collected: weather=${c.weather.map { it.place + " " + it.now }} news=${c.news.size} mail=${c.mail.map { (if (it.bulk) "[bulk] " else "") + it.subject }}")
     println("events=${c.events} tasks=${c.tasks}")
     println("errors=${c.errors}")
-    r.onSuccess { f -> println("feed: ${f.brief}\n  cards=${f.cards.map { it.title + " refs=" + it.refs + " links=" + it.links.size }}\n  cost=$${"%.4f".format(f.costUsd)}") }
+    r.onSuccess { f -> println("feed: ${f.brief}\n  cards=${f.cards.map { it.title + " refs=" + it.refs + " place=" + it.place + " task=" + it.task_title + "@" + it.task_due + " sources=" + it.sources.map { s -> s.label } }}\n  cost=$${"%.4f".format(f.costUsd)}") }
     val say = FeedEngine.say("stop showing sports and follow AI research news")
     say.onFailure { println("SAY FAILED: ${it.message}") }
     say.onSuccess { out ->
         println("reply: ${out.reply}")
         println("topics now: ${FeedEngine.config().topics}; profile: ${FeedEngine.profile().trim().replace("\n", " | ")}")
+        println("tasks now: ${com.qshlab.daybreak.cal.Cal.tasks().map { it.task.title + "@" + it.task.due }}")
         if (out.rewrite) FeedEngine.refresh(out.focus, reuse = true).onSuccess { println("rewritten: ${it.brief}") }.onFailure { println("REWRITE FAILED: ${it.message}") }
     }
     println("usage this month: ${Claude.thisMonth()}")

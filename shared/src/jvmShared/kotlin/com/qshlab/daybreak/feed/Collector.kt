@@ -41,7 +41,9 @@ object Collector {
             // This device's own mail (Apple Mail: read it now). Other devices' readings come in through sync.
             val dm = Daybreak.platform.deviceMail
             if (cfg.email && dm != null && SharedMail.enabled() && dm.allowed()) {
-                runCatching { dm.refresh(since, wake = true) }.onFailure { errors += "${dm.label}: ${it.message}" }
+                // Read in the background every few minutes; here only if that reading is older than 10 minutes.
+                if (System.currentTimeMillis() - dm.readAt > 10 * 60_000L)
+                    runCatching { dm.refresh(since, wake = true) }.onFailure { errors += "${dm.label}: ${it.message}" }
                 SharedMail.mine(dm.kind)?.error?.let { errors += "${dm.label}: $it" }
             }
             val cutoff = System.currentTimeMillis() - 36 * 3600_000L

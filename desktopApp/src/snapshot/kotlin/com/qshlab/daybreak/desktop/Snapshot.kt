@@ -29,6 +29,7 @@ fun main(args: Array<String>) {
     }
     shot("mac-feed", 2360, 1560) { DaybreakApp() }
     shot("phone-feed", 820, 1700) { DaybreakApp() }
+    shot("phone-feed-tall", 820, 4600) { DaybreakApp() }
     shot("mac-month", 2360, 1560) { DaybreakApp(startTab = Tab.Calendar) }
     shot("mac-tasks", 2360, 1560) { DaybreakApp(startTab = Tab.Tasks) }
     shot("mac-week", 2360, 1560) { DaybreakApp(startTab = Tab.Calendar, calendarView = com.qshlab.daybreak.ui.CalView.Week) }

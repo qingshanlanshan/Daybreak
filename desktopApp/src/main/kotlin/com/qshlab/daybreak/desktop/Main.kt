@@ -37,7 +37,8 @@ class MacPlatform : Platform {
     val notifier = MacNotifier(bundle?.let { File(it, "Contents/MacOS/daybreak-helper") }, File(home, "local"))
 
     override fun openUrl(url: String) { ProcessBuilder("open", url).start() }
-    override val deviceMail = com.qshlab.daybreak.sources.AppleMail(File(home, "local"))
+    /** Apple Mail only in the real app (not when run from source for tests, which must never read your mail). */
+    override val deviceMail = com.qshlab.daybreak.sources.AppleMail(File(home, "local")).takeIf { bundle != null }
     override fun copyText(text: String) { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null) }
 
     override fun notify(id: String, title: String, body: String) { notifier.show(id, title, body) }
@@ -88,7 +89,7 @@ fun main(args: Array<String>) {
         kotlin.system.exitProcess(0)
     }
     if ("--mailcheck" in args) {   // diagnostics: read Apple Mail once and report counts only
-        runBlocking { runCatching { platform.deviceMail.refresh(java.time.Instant.now().minusSeconds(3 * 86400), wake = true) } }
+        runBlocking { runCatching { platform.deviceMail?.refresh(java.time.Instant.now().minusSeconds(3 * 86400), wake = true) } }
         val b = com.qshlab.daybreak.sources.SharedMail.mine("applemail")
         File(platform.home, "local/mailcheck.txt").apply { parentFile.mkdirs() }.writeText(
             "emails=${b?.items?.size} accounts=${b?.items?.map { it.account.length }?.distinct()} withText=${b?.items?.count { it.snippet.isNotBlank() }} " +
@@ -98,13 +99,19 @@ fun main(args: Array<String>) {
     platform.notifier.start()
     // The scheduled feed: checked every minute while Daybreak runs (window open or not).
     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-        var mailAt = 0L
+        // Apple Mail is read in the background, so writing the feed doesn't wait for it: once now (opening Mail
+        // hidden if the last reading is over half an hour old), then every 15 minutes while Mail is open.
+        val mail = com.qshlab.daybreak.sources.SharedMail
+        if (mail.enabled()) runCatching {
+            val stale = System.currentTimeMillis() - (mail.mine("applemail")?.at ?: 0) > 30 * 60_000L
+            platform.deviceMail?.refresh(java.time.Instant.now().minusSeconds(3 * 86400), wake = stale)
+        }
+        var mailAt = System.currentTimeMillis()
         while (true) {
             runCatching { com.qshlab.daybreak.feed.FeedEngine.tick() }
-            // Every 15 minutes, while Apple Mail is open anyway: keep the synced copy fresh for the phone's feed.
-            if (System.currentTimeMillis() - mailAt > 15 * 60_000L && com.qshlab.daybreak.sources.SharedMail.enabled()) {
+            if (System.currentTimeMillis() - mailAt > 15 * 60_000L && mail.enabled()) {
                 mailAt = System.currentTimeMillis()
-                runCatching { platform.deviceMail.refresh(java.time.Instant.now().minusSeconds(3 * 86400), wake = false) }
+                runCatching { platform.deviceMail?.refresh(java.time.Instant.now().minusSeconds(3 * 86400), wake = false) }
             }
             kotlinx.coroutines.delay(60_000)
         }

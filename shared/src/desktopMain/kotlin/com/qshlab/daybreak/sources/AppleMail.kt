@@ -16,6 +16,8 @@ class AppleMail(private val work: File) : DeviceMail {
     override val kind = "applemail"
     override val full = true
     override val label = "Apple Mail"
+    @Volatile override var readAt = 0L
+        private set
 
     /** Runs [cmd]; gives up after [seconds] (exit code -1). */
     private fun run(vararg cmd: String, seconds: Long = 60): Pair<Int, String> {
@@ -29,7 +31,15 @@ class AppleMail(private val work: File) : DeviceMail {
 
     private fun running() = run("pgrep", "-x", "Mail").first == 0
 
-    override suspend fun refresh(since: Instant, wake: Boolean) = withContext(Dispatchers.IO) {
+    private val reading = kotlinx.coroutines.sync.Mutex()
+
+    override suspend fun refresh(since: Instant, wake: Boolean) {
+        // Already reading (in the background): wait for that reading instead of starting a second one.
+        if (!reading.tryLock()) { reading.lock(); reading.unlock(); return }
+        try { read(since, wake) } finally { reading.unlock() }
+    }
+
+    private suspend fun read(since: Instant, wake: Boolean) = withContext(Dispatchers.IO) {
         val wasRunning = running()
         if (!wasRunning && !wake) return@withContext
         if (!wasRunning) {
@@ -50,13 +60,14 @@ class AppleMail(private val work: File) : DeviceMail {
             // Emails read before keep their text: Mail is only asked for the new ones' (fetching text is the slow part).
             val known = SharedMail.mine(kind)?.items.orEmpty().filter { it.url.isNotBlank() }.associateBy { it.url }
             val knownFile = File(work, "applemail-known.txt").apply { writeText(known.keys.joinToString("\n")) }
-            val (code, out) = run("osascript", "-l", "JavaScript", script.path, from.toEpochMilli().toString(), "80", if (wasRunning) "4" else "20",
+            val (code, out) = run("osascript", "-l", "JavaScript", script.path, from.toEpochMilli().toString(), "80", if (wasRunning) "2" else "20",
                 knownFile.path, seconds = 240)
             if (code != 0) SharedMail.save(kind, true, emptyList(), if (code == -1) "Apple Mail took too long to answer. Try Read now again in a moment." else explain(out))
             else {
                 val r = json.decodeFromString<Reading>(out.trim())
                 lastTiming = r.ms
-                SharedMail.save(kind, true, r.items.map { m -> known[m.url]?.let { k -> m.copy(snippet = k.snippet, bulk = k.bulk) } ?: m })
+                SharedMail.save(kind, true, r.items.map { m -> known[m.url]?.let { k -> m.copy(snippet = k.snippet, bulk = k.bulk, account = k.account) } ?: m })
+                readAt = System.currentTimeMillis()
             }
         } finally {
             if (!wasRunning) run("osascript", "-e", "tell application \"Mail\" to quit")
@@ -95,22 +106,23 @@ class AppleMail(private val work: File) : DeviceMail {
               lap("find");
               if (!dates.length) return JSON.stringify({ items: [], ms: ms });
               const subjects = spec.subject(), senders = spec.sender(), ids = spec.messageId();
-              let accounts = []; try { accounts = spec.mailbox.account.name(); } catch (e) {}
-              let junk = []; try { junk = spec.junkMailStatus(); } catch (e) {}
               lap("fields");
               const order = dates.map((d, i) => [d.getTime(), i]).sort((a, b) => b[0] - a[0]).slice(0, limit);
               const out = [];
               let fetched = 0;
               for (const [time, i] of order) {
                 const url = ids[i] ? "message://%3C" + encodeURIComponent(ids[i]) + "%3E" : "";
-                let body = "", bulk = junk[i] === true;
+                let body = "", bulk = false, account = "";
                 if (!url || !known.has(url)) {
+                  // Only for emails not read before (the rest keep what was read then): account, spam, newsletter, text.
                   const m = spec[i];
+                  try { account = m.mailbox().account().name(); } catch (e) {}
+                  try { bulk = m.junkMailStatus() === true; } catch (e) {}
                   try { if (!bulk) bulk = m.headers.whose({ name: { _equals: "list-unsubscribe" } })().length > 0; } catch (e) {}
                   if (!bulk) { try { body = String(m.content() || "").replace(/\s+/g, " ").trim().slice(0, 1200); } catch (e) {} }
                   fetched++;
                 }
-                out.push({ account: String(accounts[i] || ""), from: String(senders[i] || "?"), subject: String(subjects[i] || "(no subject)"),
+                out.push({ account: String(account || ""), from: String(senders[i] || "?"), subject: String(subjects[i] || "(no subject)"),
                            received: time, snippet: body, bulk: bulk, url: url });
               }
               lap("text"); ms.fetched = fetched;

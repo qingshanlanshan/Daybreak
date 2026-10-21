@@ -1,5 +1,12 @@
 package com.qshlab.daybreak.ui
 
+import com.qshlab.daybreak.feed.Source
+import com.qshlab.daybreak.feed.NewTask
+import com.qshlab.daybreak.feed.Feedback
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -73,7 +80,8 @@ fun FeedScreen(onSettings: (() -> Unit)?, openSettings: () -> Unit) {
     val feed = remember(version) { FeedEngine.current() }
     val collected = remember(version) { FeedEngine.collected() }
     val chat = remember(version) { FeedEngine.chat() }
-    val reactions = remember(version) { FeedEngine.feedback().associate { it.title to it.verdict } }
+    val reactions = remember(version) { FeedEngine.feedback().associateBy { it.title } }
+    val placeOrder = remember(version) { com.qshlab.daybreak.sources.Places.resolved().map { it.name } }
     val hasKey = remember(version) { Claude.key != null }
     val scope = rememberCoroutineScope()
     var sources by remember { mutableStateOf(false) }
@@ -111,7 +119,17 @@ fun FeedScreen(onSettings: (() -> Unit)?, openSettings: () -> Unit) {
                             Hint("Updated ${ago(f.generatedAt / 1000.0)}" + (f.focus?.let { " · focus: $it" } ?: "") + " · about $%.2f".format(f.costUsd), Modifier.padding(top = 6.dp))
                         }
                     }
-                    items(f.cards, key = { it.title }) { c -> FeedCard(c, reactions[c.title]) }
+                    // Cards about one of your places come after the others, under the place's name, in your order of places.
+                    val (local, general) = f.cards.withIndex().partition { it.value.place.isNotBlank() }
+                    items(general, key = { "c${it.index}" }) { (_, c) -> FeedCard(c, reactions[c.title], version) }
+                    val groups = local.groupBy { it.value.place }.toList()
+                        .sortedBy { (p, _) -> placeOrder.indexOfFirst { it.equals(p, true) }.let { i -> if (i < 0) Int.MAX_VALUE else i } }
+                    for ((place, cs) in groups) {
+                        item(key = "p-$place") {
+                            Text("📍 $place", Modifier.widthIn(max = 760.dp).fillMaxWidth().padding(top = 8.dp), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        items(cs, key = { "c${it.index}" }) { (_, c) -> FeedCard(c, reactions[c.title], version) }
+                    }
                 }
                 item { Spacer(Modifier.size(8.dp)) }
             }
@@ -136,8 +154,13 @@ private fun Notice(title: String, text: String, actions: @Composable () -> Unit)
     }
 }
 
+private val REASONS = listOf("Not relevant to me", "I already knew", "Wrong or outdated", "Repeats another card", "Too long")
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FeedCard(c: Card, reaction: String?) {
+private fun FeedCard(c: Card, reaction: Feedback?, version: Int) {
+    var askWhy by remember { mutableStateOf(false) }
+    var other by remember { mutableStateOf("") }
     Surface(Modifier.widthIn(max = 760.dp).fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -147,16 +170,48 @@ private fun FeedCard(c: Card, reaction: String?) {
             }
             Text(c.body, lineHeight = 21.sp)
             if (c.why.isNotBlank()) Hint(c.why)
+            // What it's based on, by name ("Email from Prof Tan", "CNA"); older feeds only had addresses.
+            val links = c.sources.ifEmpty { c.links.mapIndexed { i, u -> Source(if (c.links.size > 1) "Source ${i + 1}" else "Source", u) } }
+            if (links.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                links.take(4).forEach { l -> TextButton({ Daybreak.platform.openUrl(l.url) }) { Text(l.label + "  ↗", maxLines = 1) } }
+            }
+            if (c.task_title.isNotBlank()) TaskSuggestion(c, version)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                c.links.take(2).forEachIndexed { i, url -> TextButton({ Daybreak.platform.openUrl(url) }) { Text(if (c.links.size > 1) "Open ${i + 1}" else "Open") } }
-                Spacer(Modifier.weight(1f))
-                Text("👍", Modifier.clip(CircleShape).background(if (reaction == "up") MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .clickable { FeedEngine.react(c, "up") }.padding(8.dp))
-                Text("👎", Modifier.clip(CircleShape).background(if (reaction == "down") MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .clickable { FeedEngine.react(c, "down") }.padding(8.dp))
+                if (reaction?.verdict == "down") Hint(if (reaction.note.isNotBlank()) "👎 ${reaction.note}. Daybreak will show less like this." else "Daybreak will show less like this.", Modifier.weight(1f))
+                else Spacer(Modifier.weight(1f))
+                Text("👍", Modifier.clip(CircleShape).background(if (reaction?.verdict == "up") MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                    .clickable { askWhy = false; FeedEngine.react(c, "up") }.padding(8.dp))
+                Text("👎", Modifier.clip(CircleShape).background(if (reaction?.verdict == "down") MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                    .clickable { FeedEngine.react(c, "down"); askWhy = true }.padding(8.dp))
+            }
+            if (askWhy) {
+                Hint("What was wrong with it? (optional)")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    REASONS.forEach { r -> FilterChip(false, { FeedEngine.react(c, "down", r); askWhy = false }, { Text(r) }) }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(other, { other = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text("Something else…") })
+                    TextButton({ FeedEngine.react(c, "down", other.trim()); askWhy = false; other = "" }, enabled = other.isNotBlank()) { Text("Send") }
+                    TextButton({ askWhy = false }) { Text("Skip") }
+                }
             }
         }
     }
+}
+
+/** "+ Add task: Submit the ethics form · due Fri 24 Oct" — or a note that it's already in your tasks. */
+@Composable
+private fun TaskSuggestion(c: Card, version: Int) {
+    val added = remember(version, c.task_title) { com.qshlab.daybreak.cal.Cal.tasks().any { it.task.title.equals(c.task_title.trim(), true) } }
+    val due = remember(c.task_due) {
+        runCatching {
+            if (c.task_due.length > 10) java.time.LocalDateTime.parse(c.task_due).let { relativeDay(it.toLocalDate()) + " " + timeText(it.toLocalTime()) }
+            else if (c.task_due.isNotBlank()) relativeDay(java.time.LocalDate.parse(c.task_due)) else null
+        }.getOrNull()
+    }
+    val label = c.task_title + (due?.let { " · due $it" } ?: "")
+    if (added) Hint("✓ In your tasks: $label")
+    else OutlinedButton({ FeedEngine.addTask(NewTask(c.task_title, c.task_due, "From your feed: ${c.title}")) }) { Text("+ Add task: $label") }
 }
 
 @Composable

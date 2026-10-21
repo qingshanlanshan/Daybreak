@@ -52,8 +52,20 @@ data class Card(
     val why: String = "",
     val refs: List<String> = emptyList(),   // ids of the items it's based on (M3, N12, W1, E2, T4, S1)
     val priority: Int = 2,                  // 1 = important
-    val links: List<String> = emptyList(),  // filled in from refs: the original articles / emails
+    val links: List<String> = emptyList(),  // (older feeds) the original articles / emails
+    val place: String = "",                 // the user's place a local / weather card is about ("" = none)
+    val task_title: String = "",            // a task the card suggests adding ("" = none)
+    val task_due: String = "",              // "2026-10-25", "2026-10-25T17:00" or "" (no deadline)
+    val sources: List<Source> = emptyList(),   // filled in from refs: what to open, with a name
 )
+
+/** Something a card is based on that can be opened: "Email from Prof Tan", "CNA". */
+@Serializable
+data class Source(val label: String, val url: String)
+
+/** A task the assistant adds or suggests. */
+@Serializable
+data class NewTask(val title: String, val due: String = "", val notes: String = "")
 
 @Serializable
 data class FeedResult(

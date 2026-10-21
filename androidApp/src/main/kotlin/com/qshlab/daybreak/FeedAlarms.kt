@@ -19,22 +19,25 @@ import kotlinx.coroutines.launch
 import java.time.ZoneId
 
 /**
- * The scheduled feed on Android: alarms 15 minutes before each update time (write it) and at the time
- * (notify). An alarm starts a short job with network access, which does FeedEngine.tick().
+ * The scheduled feed on Android: alarms around each update time (see schedule()). An alarm starts a short job
+ * with network access, which does FeedEngine.tick().
  */
 object FeedAlarms {
+    /** One alarm, at the next moment tick() has something to do. */
     fun schedule(ctx: Context) {
         val am = ctx.getSystemService(AlarmManager::class.java)
         for (code in listOf(2000, 2001)) PendingIntent.getBroadcast(ctx, code, Intent(ctx, FeedAlarmReceiver::class.java), PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)?.let { am.cancel(it) }
-        val next = runCatching { FeedEngine.nextSlot(java.time.LocalDateTime.now().plusMinutes(1).minusMinutes(15)) }.getOrNull() ?: return
-        fun at(t: java.time.LocalDateTime, code: Int) {
-            val ms = t.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli().coerceAtLeast(System.currentTimeMillis() + 5_000)
-            val pi = PendingIntent.getBroadcast(ctx, code, Intent(ctx, FeedAlarmReceiver::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, ms, pi)
-            else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, ms, pi)
-        }
-        at(next.minusMinutes(15), 2000)
-        at(next, 2001)
+        val now = java.time.LocalDateTime.now()
+        val s = runCatching { FeedEngine.config().schedule }.getOrNull() ?: return
+        // For each update time: 15 min before (write it), at it (notify), 10 min after (the Mac's turn to write is
+        // over: write it here if it hasn't), 30 min after (notify late if the feed came late).
+        val next = (0..2).flatMap { FeedEngine.slots(now.toLocalDate().plusDays(it.toLong()), s) }
+            .flatMap { listOf(it.minusMinutes(15), it, it.plusMinutes(10), it.plusMinutes(30)) }
+            .filter { it.isAfter(now.plusSeconds(20)) }.minOrNull() ?: return
+        val ms = next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val pi = PendingIntent.getBroadcast(ctx, 2000, Intent(ctx, FeedAlarmReceiver::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, ms, pi)
+        else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, ms, pi)
     }
 
     fun runJob(ctx: Context) {

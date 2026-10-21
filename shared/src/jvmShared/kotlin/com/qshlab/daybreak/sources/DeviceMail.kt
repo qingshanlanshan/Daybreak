@@ -22,6 +22,8 @@ interface DeviceMail {
     fun allowed(): Boolean = true
     /** Opens the system setting that grants it. */
     fun requestAccess() {}
+    /** When it last read successfully (ms; 0 = not yet in this run of the app). */
+    val readAt: Long get() = 0
     /** Opens this app's system settings (Android: where "Allow restricted settings" is). */
     fun openAppSettings() {}
     /**
