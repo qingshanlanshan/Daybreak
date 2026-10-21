@@ -92,3 +92,9 @@ tasks.register<JavaExec>("requestcheck") {
     environment("DAYBREAK_HOME", project.findProperty("home") as String? ?: "")
     environment("DAYBREAK_CLAUDE_URL", "http://127.0.0.1:9200")
 }
+
+tasks.register<JavaExec>("locatecheck") {
+    classpath = sourceSets["snapshot"].runtimeClasspath
+    mainClass.set("com.qshlab.daybreak.desktop.locatecheck.LocateCheckKt")
+    environment("DAYBREAK_HOME", layout.buildDirectory.dir("locatecheck-home").get().asFile.path)
+}
