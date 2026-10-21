@@ -1,5 +1,10 @@
 package com.qshlab.daybreak.ui
 
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.outlined.ThumbDown
+import androidx.compose.material.icons.outlined.ThumbUp
+import androidx.compose.foundation.border
 import com.qshlab.daybreak.feed.Source
 import com.qshlab.daybreak.feed.NewTask
 import com.qshlab.daybreak.feed.Feedback
@@ -170,19 +175,24 @@ private fun FeedCard(c: Card, reaction: Feedback?, version: Int) {
             }
             Text(c.body, lineHeight = 21.sp)
             if (c.why.isNotBlank()) Hint(c.why)
-            // What it's based on, by name ("Email from Prof Tan", "CNA"); older feeds only had addresses.
-            val links = c.sources.ifEmpty { c.links.mapIndexed { i, u -> Source(if (c.links.size > 1) "Source ${i + 1}" else "Source", u) } }
-            if (links.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                links.take(4).forEach { l -> TextButton({ Daybreak.platform.openUrl(l.url) }) { Text(l.label + "  ↗", maxLines = 1) } }
+            // What it's based on, as a footnote: "Sources: CNA ↗ · Email from Prof Tan ↗". Older feeds only kept addresses.
+            val links = c.sources.ifEmpty { c.links.map { Source(siteName(it), it) } }
+            if (links.isNotEmpty()) FlowRow(verticalArrangement = Arrangement.Center) {
+                val gray = MaterialTheme.colorScheme.onSurfaceVariant
+                Text(if (links.size == 1) "Source: " else "Sources: ", fontSize = 12.sp, color = gray, modifier = Modifier.padding(vertical = 4.dp))
+                links.take(4).forEachIndexed { i, l ->
+                    if (i > 0) Text(" · ", fontSize = 12.sp, color = gray, modifier = Modifier.padding(vertical = 4.dp))
+                    Text(l.label + " ↗", Modifier.clip(RoundedCornerShape(4.dp)).clickable { Daybreak.platform.openUrl(l.url) }.padding(vertical = 4.dp),
+                        fontSize = 12.sp, color = gray, maxLines = 1)
+                }
             }
             if (c.task_title.isNotBlank()) TaskSuggestion(c, version)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (reaction?.verdict == "down") Hint(if (reaction.note.isNotBlank()) "👎 ${reaction.note}. Daybreak will show less like this." else "Daybreak will show less like this.", Modifier.weight(1f))
                 else Spacer(Modifier.weight(1f))
-                Text("👍", Modifier.clip(CircleShape).background(if (reaction?.verdict == "up") MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .clickable { askWhy = false; FeedEngine.react(c, "up") }.padding(8.dp))
-                Text("👎", Modifier.clip(CircleShape).background(if (reaction?.verdict == "down") MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .clickable { FeedEngine.react(c, "down"); askWhy = true }.padding(8.dp))
+                Vote(Icons.Outlined.ThumbUp, Icons.Filled.ThumbUp, "Good card", reaction?.verdict == "up") { askWhy = false; FeedEngine.react(c, "up") }
+                Spacer(Modifier.width(8.dp))
+                Vote(Icons.Outlined.ThumbDown, Icons.Filled.ThumbDown, "Bad card", reaction?.verdict == "down") { FeedEngine.react(c, "down"); askWhy = true }
             }
             if (askWhy) {
                 Hint("What was wrong with it? (optional)")
@@ -198,6 +208,21 @@ private fun FeedCard(c: Card, reaction: Feedback?, version: Int) {
         }
     }
 }
+
+/** 👍 / 👎: an outlined icon in a thin gray circle; filled in the accent colour once chosen. */
+@Composable
+private fun Vote(icon: androidx.compose.ui.graphics.vector.ImageVector, chosenIcon: androidx.compose.ui.graphics.vector.ImageVector,
+                 label: String, chosen: Boolean, onClick: () -> Unit) {
+    val color = if (chosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(Modifier.size(34.dp).clip(CircleShape).border(1.dp, if (chosen) color else MaterialTheme.colorScheme.outlineVariant, CircleShape).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center) {
+        Icon(if (chosen) chosenIcon else icon, label, Modifier.size(17.dp), tint = color)
+    }
+}
+
+/** A readable name for a web address: "straitstimes.com"; Google News links say "Google News". */
+private fun siteName(url: String): String = runCatching { java.net.URI(url).host.removePrefix("www.") }.getOrNull()
+    ?.let { if (it == "news.google.com") "Google News" else it } ?: "Link"
 
 /** "+ Add task: Submit the ethics form · due Fri 24 Oct" — or a note that it's already in your tasks. */
 @Composable
