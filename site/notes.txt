@@ -1,1 +1,1 @@
-Daybreak 1.0.1: first public release — calendar, tasks and reminders, and a personal feed written by Claude from your weather, news, email and calendar.
+Daybreak 1.0.2: email without signing in — Apple Mail on the Mac, Outlook and Gmail notifications on Android (whole emails from the Mac replace previews, through Sync). Settings is now a list of pages.
