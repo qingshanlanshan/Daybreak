@@ -34,6 +34,7 @@ class AndroidPlatform(private val app: Application) : Platform {
         else "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
     override val appVersion: String = app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "?"
     override val updater = AndroidUpdater(app)
+    override val deviceMail = NotificationMail(app)
 
     /** Set by the activity while it's open (the camera scanner and file pickers need it). */
     var scanner: (((String?) -> Unit) -> Unit)? = null

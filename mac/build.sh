@@ -21,6 +21,7 @@ swiftc -O -o "$APP/Contents/MacOS/daybreak-helper" mac/helper/main.swift
 P="$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :NSLocationUsageDescription string 'Daybreak uses your location for local weather and news.'" "$P" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string 'Daybreak uses your location for local weather and news.'" "$P" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :NSAppleEventsUsageDescription string 'Daybreak reads your inbox in Apple Mail (read-only) for your feed.'" "$P" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion 13.0" "$P"
 /usr/libexec/PlistBuddy -c "Add :NSHumanReadableCopyright string '© 2026 qshlab'" "$P" 2>/dev/null || true
 

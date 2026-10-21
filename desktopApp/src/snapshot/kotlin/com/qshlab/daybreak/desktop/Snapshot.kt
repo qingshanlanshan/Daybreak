@@ -38,6 +38,13 @@ fun main(args: Array<String>) {
     shot("mac-settings", 2360, 1560) { DaybreakApp(startInSettings = true) }
     shot("phone-calendar", 820, 1700) { DaybreakApp(startTab = Tab.Calendar) }
     shot("phone-settings", 820, 1700) { DaybreakApp(startInSettings = true) }
+    run {   // mail a phone read, as it would arrive through sync
+        val now = System.currentTimeMillis()
+        java.io.File(Daybreak.platform.home, "mail/notifications-pixel.json").apply { parentFile.mkdirs() }.writeText(com.qshlab.daybreak.data.json.encodeToString(
+            com.qshlab.daybreak.sources.MailBox.serializer(), com.qshlab.daybreak.sources.MailBox("notifications", "pixel", "Pixel 9", now - 600_000, false,
+                listOf(com.qshlab.daybreak.sources.Mail("Outlook", "IT Helpdesk", "Password expiry", now - 3600_000, "Your password expires")))))
+    }
+    shot("mac-email", 2360, 1560) { com.qshlab.daybreak.ui.DaybreakTheme { com.qshlab.daybreak.ui.SettingsScreen({}, com.qshlab.daybreak.ui.SettingsPage.Email) } }
     println("snapshots in $out")
     exitProcess(0)
 }

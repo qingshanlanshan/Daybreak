@@ -1,6 +1,11 @@
 package com.qshlab.daybreak.ui
 
 import androidx.compose.foundation.Canvas
+import com.qshlab.daybreak.data.Changes
+import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -52,25 +57,87 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 
+/** The sections of Settings: each is a row on the main page and opens its own page. */
+enum class SettingsPage(val title: String) {
+    Claude("Claude"), AboutMe("About me"), Schedule("Updates & notifications"), Places("Places"), Email("Email"),
+    Sources("What the feed reads"), Sync("Sync"), App("App updates")
+}
+
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, start: SettingsPage? = null) {
+    var page by rememberSaveable { mutableStateOf(start) }
+    BackHandler(page != null) { page = null }
+    val p = page
+    if (p != null) {
+        TabScreen(p.title, onBack = { page = null }) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+                Column(Modifier.widthIn(max = 720.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    when (p) {
+                        SettingsPage.Claude -> ClaudeSection()
+                        SettingsPage.AboutMe -> AboutMeSection()
+                        SettingsPage.Schedule -> ScheduleSection()
+                        SettingsPage.Places -> PlacesSection()
+                        SettingsPage.Email -> EmailSection()
+                        SettingsPage.Sources -> SourcesSection()
+                        SettingsPage.Sync -> SyncSection()
+                        SettingsPage.App -> UpdatesSection()
+                    }
+                }
+            }
+        }
+        return
+    }
+    val version by Changes.version.collectAsState()
+    val sync by Daybreak.sync.config.collectAsState()
+    val update by Updates.available.collectAsState()
     TabScreen("Settings", onBack = onBack) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Column(Modifier.widthIn(max = 720.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ClaudeSection()
-            AboutMeSection()
-            ScheduleSection()
-            PlacesSection()
-            EmailSection()
-            SourcesSection()
-            SyncSection()
-            UpdatesSection()
-            Hint("Daybreak ${Daybreak.platform.appVersion} · qshlab", Modifier.padding(top = 24.dp))
-          }
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp).padding(bottom = 32.dp)) {
+            Column(Modifier.widthIn(max = 720.dp)) {
+                for (pg in SettingsPage.entries) {
+                    val summary = remember(version, sync, update, pg) { summary(pg) }
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { page = pg }.padding(horizontal = 8.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(pg.title, fontWeight = FontWeight.SemiBold)
+                            Hint(summary.first, color = if (summary.second) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 22.sp)
+                    }
+                    HorizontalDivider(Modifier.padding(horizontal = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                }
+                Hint("Daybreak ${Daybreak.platform.appVersion} · qshlab", Modifier.padding(start = 8.dp, top = 24.dp))
+            }
         }
     }
 }
+
+/** One line under each section on the main Settings page, and whether it needs attention. */
+private fun summary(p: SettingsPage): Pair<String, Boolean> = runCatching {
+    val cfg = com.qshlab.daybreak.feed.FeedEngine.config()
+    when (p) {
+        SettingsPage.Claude -> if (com.qshlab.daybreak.feed.Claude.keyHint == null) "Add your API key to get your feed" to true
+            else com.qshlab.daybreak.feed.Claude.model(cfg.model).name to false
+        SettingsPage.AboutMe -> com.qshlab.daybreak.feed.FeedEngine.profile().replace('\n', ' ').take(70).ifBlank { "Tell Daybreak what matters to you" } to false
+        SettingsPage.Schedule -> cfg.schedule.let { s ->
+            when (s.mode) { "manual" -> "Only when you ask"; "interval" -> "Every ${s.everyHours} hours"; else -> "At ${s.times.joinToString(", ")}" } +
+                if (s.notify) " · notifies" else ""
+        } to false
+        SettingsPage.Places -> com.qshlab.daybreak.sources.Places.list().joinToString(", ") { if (it.current) "Current location" else it.name }.ifBlank { "None" } to false
+        SettingsPage.Email -> {
+            val dm = Daybreak.platform.deviceMail
+            val parts = buildList {
+                if (dm != null && com.qshlab.daybreak.sources.SharedMail.enabled()) add(if (dm.allowed()) dm.label else "${dm.label}: needs access")
+                val n = com.qshlab.daybreak.sources.MailAccounts.list().size
+                if (n > 0) add("$n account${if (n == 1) "" else "s"}")
+            }
+            parts.joinToString(" · ").ifEmpty { "Off" } to (dm != null && com.qshlab.daybreak.sources.SharedMail.enabled() && !dm.allowed())
+        }
+        SettingsPage.Sources -> listOfNotNull("Weather".takeIf { cfg.weather }, "local news".takeIf { cfg.localNews }, "email".takeIf { cfg.email },
+            "calendar".takeIf { cfg.calendar }, "${cfg.topics.size} topics".takeIf { cfg.topics.isNotEmpty() }).joinToString(", ") to false
+        SettingsPage.Sync -> (Daybreak.sync.config.value?.let { "On · ${Daybreak.sync.devices().size} devices" } ?: "Off") to false
+        SettingsPage.App -> (Updates.available.value?.let { "Daybreak ${it.version} is available" } ?: "Version ${Daybreak.platform.appVersion}") to (Updates.available.value != null)
+    }
+}.getOrElse { "" to false }
 
 fun ago(t: Double): String {
     val s = System.currentTimeMillis() / 1000.0 - t
@@ -108,7 +175,6 @@ fun SyncSection() {
         }
     }
 
-    SectionTitle("Sync", Modifier.padding(top = 8.dp))
     val c = cfg
     if (c == null) {
         Hint("Keep your calendar, tasks and feed the same on your phone and your Mac, through your own Cloudflare R2 storage (free up to 10 GB). Everything is encrypted on the device before upload, so Cloudflare can't read it.")
@@ -203,7 +269,6 @@ fun UpdatesSection() {
     var msg by remember { mutableStateOf<String?>(null) }
     var auto by remember { mutableStateOf(Updates.autoCheck()) }
 
-    SectionTitle("Updates", Modifier.padding(top = 16.dp))
     Hint("Installed: ${Daybreak.platform.appVersion}. New versions come from daybreak.qshlab.com.")
     Row(verticalAlignment = Alignment.CenterVertically) { Text("Check automatically", Modifier.weight(1f)); Switch(auto, { auto = it; Updates.setAutoCheck(it) }) }
     update?.let { u ->

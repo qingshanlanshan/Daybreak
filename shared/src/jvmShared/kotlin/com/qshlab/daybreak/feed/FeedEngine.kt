@@ -224,7 +224,7 @@ object FeedEngine {
             val user = buildString {
                 appendLine("Current profile:\n${profile().ifBlank { "(empty)" }}\n")
                 appendLine("Current sources: topics=${cfg.topics}, feeds=${cfg.feeds.map { it.name }}, web searches=${cfg.searches}, " +
-                    "places=${Places.list().map { if (it.current) "current location" else it.name }}, email accounts=${com.qshlab.daybreak.sources.MailAccounts.list().map { it.email }}\n")
+                    "places=${Places.list().map { if (it.current) "current location" else it.name }}, email from=${com.qshlab.daybreak.sources.MailAccounts.list().map { it.email } + com.qshlab.daybreak.sources.SharedMail.boxes().map { (if (it.kind == "applemail") "Apple Mail" else "mail notifications") + " on " + it.deviceName }}\n")
                 current()?.let { f -> appendLine("Current feed (written ${ago(f.generatedAt)}):\n${f.brief}\n" + f.cards.joinToString("\n") { "- [${it.kind}] ${it.title}: ${it.body}" } + "\n") }
                 collected()?.let { appendLine("The material behind it:\n" + material(it, cfg, null).take(30000) + "\n") }
                 if (history.isNotEmpty()) { appendLine("Conversation so far:"); history.forEach { appendLine("${it.role}: ${it.text}") } }

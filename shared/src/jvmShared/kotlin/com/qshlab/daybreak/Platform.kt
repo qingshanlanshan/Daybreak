@@ -30,6 +30,8 @@ interface Platform {
     /** Mac: whether Daybreak opens (in the background) when you log in; null where it doesn't apply. */
     fun openAtLogin(): Boolean? = null
     fun setOpenAtLogin(on: Boolean) {}
+    /** Mail this device reads without an account: Apple Mail (Mac), mail-app notifications (Android). */
+    val deviceMail: com.qshlab.daybreak.sources.DeviceMail? get() = null
     /** Clock style for times. */
     val use24Hour: Boolean get() = !(java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT) as java.text.SimpleDateFormat).toPattern().contains('a')
 }

@@ -19,6 +19,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,7 @@ import com.qshlab.daybreak.sources.MailAccount
 import com.qshlab.daybreak.sources.MailAccounts
 import com.qshlab.daybreak.sources.MailReader
 import com.qshlab.daybreak.sources.Outlook
+import com.qshlab.daybreak.sources.SharedMail
 import com.qshlab.daybreak.sources.Place
 import com.qshlab.daybreak.sources.Places
 import kotlinx.coroutines.Dispatchers
@@ -64,7 +66,6 @@ fun ClaudeSection() {
     var key by remember { mutableStateOf("") }
     var test by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
-    SectionTitle("Claude", Modifier.padding(top = 8.dp))
     Hint("Claude writes your feed and answers you. Only text is sent to Anthropic (email snippets, headlines, your events and tasks); it's not used for training. Your key is kept on your devices and syncs to them encrypted.")
     Text("API key", fontWeight = FontWeight.SemiBold)
     Hint(hint?.let { "Saved ($it)" } ?: "Not set — get one at console.anthropic.com → API keys.")
@@ -95,7 +96,6 @@ fun AboutMeSection() {
     val version by Changes.version.collectAsState()
     val saved = remember(version) { FeedEngine.profile() }
     var text by remember(saved) { mutableStateOf(saved) }
-    SectionTitle("About me", Modifier.padding(top = 16.dp))
     Hint("What matters to you and what to skip. The feed follows this; when you tell Daybreak something lasting in the Feed tab, it updates this too.")
     OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth(), minLines = 4,
         placeholder = { Text("e.g. PhD student in Singapore. Care about: my research and supervisor's emails, family, MRT disruptions, haze and rain. Skip: politics, promotions, sports.") })
@@ -111,7 +111,6 @@ fun ScheduleSection() {
     val cfg = remember(version) { FeedEngine.config() }
     val s = cfg.schedule
     fun save(n: com.qshlab.daybreak.feed.Schedule) = FeedEngine.saveConfig(cfg.copy(schedule = n))
-    SectionTitle("Updates & notifications", Modifier.padding(top = 16.dp))
     Hint("Each update costs a little (Claude). Only one of your devices writes each update; the others get it through sync.")
     Menu("Update", when (s.mode) { "manual" -> "Only when I ask"; "interval" -> "Every ${s.everyHours} hours"; else -> "At set times" },
         listOf("At set times" to { save(s.copy(mode = "daily")) }, "Every few hours" to { save(s.copy(mode = "interval")) }, "Only when I ask" to { save(s.copy(mode = "manual")) }))
@@ -163,7 +162,6 @@ fun SourcesSection() {
     var feedName by remember { mutableStateOf("") }
     var feedUrl by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
-    SectionTitle("What the feed reads", Modifier.padding(top = 16.dp))
     Hint("You can also just tell Daybreak in the Feed tab (\"follow news about AI research\", \"stop showing sports\").")
     for ((label, on, set) in listOf(
         Triple("Weather (for your places)", cfg.weather) { v: Boolean -> FeedEngine.saveConfig(cfg.copy(weather = v)) },
@@ -205,7 +203,6 @@ fun PlacesSection() {
     var q by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<Place>>(emptyList()) }
     var msg by remember { mutableStateOf<String?>(null) }
-    SectionTitle("Places", Modifier.padding(top = 16.dp))
     Hint("Weather and local news cover each of these.")
     for (p in places) Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -240,16 +237,67 @@ fun EmailSection() {
     var code by remember { mutableStateOf<Outlook.DeviceCode?>(null) }
     var clientId by remember(cfg.outlookClientId) { mutableStateOf(cfg.outlookClientId.ifBlank { OUTLOOK_CLIENT_ID }) }
     val platform = Daybreak.platform
+    val mac = platform.kind == "mac"
+    // Permissions are granted in system settings: look again every few seconds while this page is open.
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(2000); tick++ } }
+    val dm = platform.deviceMail
+    val on = remember(version) { SharedMail.enabled() }
+    val allowed = remember(tick, version) { dm?.allowed() ?: false }
+    val boxes = remember(version, tick) { SharedMail.boxes() }
+    val mine = boxes.firstOrNull { it.device == Daybreak.sync.deviceId && it.kind == dm?.kind }
 
-    SectionTitle("Email", Modifier.padding(top = 16.dp))
     Hint("Read-only: Daybreak never sends, deletes or marks anything. Newsletters and promotions are labelled so the feed can skip them.")
+    if (dm != null) {
+        Text(if (mac) "On this Mac" else "On this phone", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(dm.label)
+                Hint(when {
+                    !on -> "Off"
+                    !allowed -> "Needs notification access"
+                    mine?.error != null -> mine.error
+                    mine != null -> "${mine.items.size} email${if (mine.items.size == 1) "" else "s"} · ${if (mac) "read" else "updated"} ${ago(mine.at / 1000.0)}"
+                    mac -> "Not read yet: Daybreak reads it before each feed update."
+                    else -> "On: waiting for new mail."
+                }, color = if (on && (mine?.error != null || !allowed)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(on, { SharedMail.setEnabled(it) })
+        }
+        if (mac) {
+            Hint("Reads the inbox of every account in Apple Mail, school or work Outlook included. macOS asks once to let Daybreak control Mail. If Mail isn't open, Daybreak opens it in the background before a feed update so it fetches new mail, then quits it again.")
+            if (on) OutlinedButton({
+                busy = true; msg = null
+                scope.launch { runCatching { dm.refresh(java.time.Instant.now().minusSeconds(3 * 86400), wake = true) }.onFailure { msg = it.message }; busy = false }
+            }, enabled = !busy) { Text(if (busy) "Reading…" else "Read now") }
+        } else {
+            Hint("Daybreak reads the new-mail notifications of the Outlook and Gmail apps: sender, subject and a preview. It sees mail that arrives after you allow this, and only what the notification shows. When the whole email is available another way (an account below, or Apple Mail on your Mac through Sync), that's used instead.")
+            if (on && !allowed) {
+                Button({ dm.requestAccess() }) { Text("Allow notification access") }
+                Hint("If Android says it's a restricted setting: open Daybreak's App info, tap ⋮ → Allow restricted settings, then allow notification access again.")
+                TextButton({ dm.openAppSettings() }) { Text("Open App info →") }
+            }
+        }
+    }
+
+    val others = boxes.filter { it.device != Daybreak.sync.deviceId }
+    if (others.isNotEmpty()) {
+        Text("From your other devices", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+        for (b in others) Column {
+            Text((if (b.kind == "applemail") "Apple Mail" else "Mail notifications") + " on " + b.deviceName)
+            Hint("${b.items.size} email${if (b.items.size == 1) "" else "s"} · ${ago(b.at / 1000.0)}" + (b.error?.let { " · $it" } ?: ""))
+        }
+    } else if (!mac && Daybreak.sync.config.value == null) Hint("With Sync on, your phone's feed also gets the whole emails your Mac reads in Apple Mail.")
+
+    Text("Accounts (optional)", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
+    Hint("Sign in to a mailbox directly; it's read on every device. Gmail and others with an app password, or Outlook if your organisation allows it.")
     for (a in accounts) Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { Text(a.email); Hint(if (a.kind == "outlook") "Outlook" else a.host) }
         TextButton({ MailAccounts.delete(a.id) }) { Text("Remove") }
     }
     when (mode) {
         null -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton({ mode = "imap"; msg = null }) { Text("Add Gmail or other") }
+            OutlinedButton({ mode = "imap"; msg = null }) { Text("Add with app password") }
             OutlinedButton({ mode = "outlook"; msg = null }) { Text("Add Outlook") }
         }
         "imap" -> {

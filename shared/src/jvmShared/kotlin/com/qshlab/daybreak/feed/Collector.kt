@@ -6,6 +6,8 @@ import com.qshlab.daybreak.cal.dueDate
 import com.qshlab.daybreak.cal.overdue
 import com.qshlab.daybreak.sources.MailAccounts
 import com.qshlab.daybreak.sources.MailReader
+import com.qshlab.daybreak.sources.SharedMail
+import com.qshlab.daybreak.Daybreak
 import com.qshlab.daybreak.sources.News
 import com.qshlab.daybreak.sources.Places
 import com.qshlab.daybreak.sources.Weather
@@ -36,11 +38,17 @@ object Collector {
                 cfg.feeds.forEach { f -> add(async { safe(f.name) { News.feed(f.url, f.name, 12) } }) }
             }
             val mailJobs = if (!cfg.email) emptyList() else MailAccounts.list().map { a -> async { safe("Mail (${a.email})") { MailReader.fetch(a, since) } } }
+            // This device's own mail (Apple Mail: read it now). Other devices' readings come in through sync.
+            val dm = Daybreak.platform.deviceMail
+            if (cfg.email && dm != null && SharedMail.enabled() && dm.allowed()) {
+                runCatching { dm.refresh(since, wake = true) }.onFailure { errors += "${dm.label}: ${it.message}" }
+                SharedMail.mine(dm.kind)?.error?.let { errors += "${dm.label}: $it" }
+            }
             val cutoff = System.currentTimeMillis() - 36 * 3600_000L
             val news = newsJobs.awaitAll().filterNotNull().flatten()
                 .filter { it.published == 0L || it.published > cutoff }
                 .distinctBy { it.title.lowercase().take(60) }
-            val mail = mailJobs.awaitAll().filterNotNull().flatten().sortedByDescending { it.received }
+            val mail = if (!cfg.email) emptyList() else SharedMail.merge(mailJobs.awaitAll().filterNotNull().flatten(), since)
             val (events, tasks) = if (cfg.calendar) calendarLines() else emptyList<String>() to emptyList()
             Collected(System.currentTimeMillis(), weather.awaitAll().filterNotNull(), news, mail, events, tasks, errors = errors.toList())
         }

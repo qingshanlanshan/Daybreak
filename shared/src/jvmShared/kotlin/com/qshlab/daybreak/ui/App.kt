@@ -45,24 +45,25 @@ fun DaybreakApp(startTab: Tab = Tab.Feed, startInSettings: Boolean = false, cale
     DaybreakTheme {
         var tab by rememberSaveable { mutableStateOf(startTab) }
         var settings by rememberSaveable { mutableStateOf(startInSettings) }
+        var settingsStart by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
         BackHandler(settings) { settings = false }
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             BoxWithConstraints {
                 val wide = maxWidth >= 720.dp
                 val content: @Composable () -> Unit = {
-                    if (settings) SettingsScreen(onBack = { settings = false })
+                    if (settings) androidx.compose.runtime.key(settingsStart) { SettingsScreen(onBack = { settings = false; settingsStart = null }, start = settingsStart) }
                     else when (tab) {
-                        Tab.Feed -> FeedScreen(onSettings = if (wide) null else ({ settings = true }), openSettings = { settings = true })
+                        Tab.Feed -> FeedScreen(onSettings = if (wide) null else ({ settings = true }), openSettings = { settingsStart = SettingsPage.Claude; settings = true })
                         Tab.Calendar -> CalendarScreen(onSettings = if (wide) null else ({ settings = true }), startView = calendarView)
                         Tab.Tasks -> TasksScreen(onSettings = if (wide) null else ({ settings = true }))
                     }
                 }
                 if (wide) Row(Modifier.fillMaxSize()) {
                     NavigationRail(Modifier.fillMaxHeight(), containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                        for (t in Tab.entries) NavigationRailItem(selected = !settings && tab == t, onClick = { tab = t; settings = false },
+                        for (t in Tab.entries) NavigationRailItem(selected = !settings && tab == t, onClick = { tab = t; settings = false; settingsStart = null },
                             icon = { Icon(t.icon, null) }, label = { Text(t.label) })
                         Box(Modifier.weight(1f))
-                        NavigationRailItem(selected = settings, onClick = { settings = true },
+                        NavigationRailItem(selected = settings, onClick = { settingsStart = null; settings = true },
                             icon = { Icon(Icons.Default.Settings, null) }, label = { Text("Settings") })
                     }
                     Box(Modifier.weight(1f)) { content() }

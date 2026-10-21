@@ -78,3 +78,9 @@ tasks.register<JavaExec>("updatecheck") {
     mainClass.set("com.qshlab.daybreak.desktop.UpdateCheckKt")
     args(project.findProperty("app") as String? ?: "", project.findProperty("version") as String? ?: "")
 }
+
+tasks.register<JavaExec>("mailmergecheck") {
+    classpath = sourceSets["snapshot"].runtimeClasspath
+    mainClass.set("com.qshlab.daybreak.desktop.MailMergeCheckKt")
+    environment("DAYBREAK_HOME", layout.buildDirectory.dir("mailmerge-home").get().asFile.path)
+}
