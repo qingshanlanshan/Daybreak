@@ -53,4 +53,12 @@ PY
 if find public -mindepth 2 -type f | grep -q .; then echo "public/ must not contain subfolders" >&2; exit 1; fi
 
 npx --yes wrangler@3 deploy
+
+# Freshly uploaded parts can stall for a few minutes on their first downloads: fetch each one now, so the first
+# person to update doesn't get a stalled (and then rejected) download.
+for f in public/*.part?; do
+  for try in 1 2 3; do
+    curl -s -o /dev/null --max-time 120 -w "" "$SITE/$(basename "$f")" && break
+  done
+done
 echo "Published Android $VERSION and Mac $V to $SITE"
