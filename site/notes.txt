@@ -1,1 +1,1 @@
-Daybreak 1.0.2: email without signing in — Apple Mail on the Mac, Outlook and Gmail notifications on Android (whole emails from the Mac replace previews, through Sync). Settings is now a list of pages.
+Daybreak 1.0.3: faster updates (Apple Mail is read in the background), cards grouped by city, one card per subject, named links, 👎 with a reason, add tasks from cards or by asking in chat; the Mac writes scheduled feeds while it's awake.
