@@ -14,8 +14,8 @@ fun main() {
     val now = System.currentTimeMillis(); val h = 3600_000L
     val dir = File(Daybreak.platform.home, "mail").apply { deleteRecursively(); mkdirs() }
     File(dir, "applemail-mac.json").writeJson(MailBox("applemail", "mac", "MacBook", now, true, listOf(
-        Mail("NUS", "Prof Tan <tan@nus.edu.sg>", "Re: Draft chapter 3", now - 2 * h, "Looks good, two comments…"),
-        Mail("Gmail", "Mum <mum@gmail.com>", "Dinner Sunday?", now - 5 * h, "Are you coming…"),
+        Mail("NUS", "Prof Tan <tan@university.example>", "Re: Draft chapter 3", now - 2 * h, "Looks good, two comments…"),
+        Mail("Gmail", "Mum <mum@example.com>", "Dinner Sunday?", now - 5 * h, "Are you coming…"),
     )))
     File(dir, "notifications-phone.json").writeJson(MailBox("notifications", "phone", "Pixel", now, false, listOf(
         Mail("Outlook", "Prof Tan", "RE: Draft chapter 3", now - 2 * h + 40_000, "Looks good, two"),          // same as Apple Mail's
@@ -23,7 +23,7 @@ fun main() {
         Mail("Gmail", "Mum", "Dinner Sunday?", now - 4 * h, "Are you coming"),                               // same, an hour later
         Mail("Gmail", "Old", "Last week", now - 100 * h, "too old"),                                          // before `since`
     )))
-    val fromAccount = listOf(Mail("me@gmail.com", "Mum <mum@gmail.com>", "Dinner Sunday?", now - 5 * h + 30_000, "Are you coming…"))  // also via IMAP
+    val fromAccount = listOf(Mail("me@example.com", "Mum <mum@example.com>", "Dinner Sunday?", now - 5 * h + 30_000, "Are you coming…"))  // also via IMAP
     val merged = SharedMail.merge(fromAccount, Instant.ofEpochMilli(now - 72 * h))
     merged.forEach { println("${it.account.padEnd(14)} ${it.from.padEnd(28)} ${it.subject}") }
     val ok = merged.size == 3 && merged.count { it.subject.contains("chapter", true) } == 1 && merged.count { it.subject == "Dinner Sunday?" } == 1 &&
