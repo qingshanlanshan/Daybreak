@@ -1,1 +1,1 @@
-Daybreak 1.0.5: home-screen month widget on Android (tap a day to add a task); your phone asks your Mac for the feed first; location fixed (approximate from your internet connection when the device can't say).
+Daybreak 1.0.5: the feed reads only your unread email from the last two days; a notification whenever a new feed arrives; tap a day in the month to add a task; Android home-screen month widget; your phone asks your Mac for the feed first; location fixed; ⌘W closes the Mac window.

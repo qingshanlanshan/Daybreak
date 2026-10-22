@@ -27,7 +27,7 @@ data class MailAccount(
 
 @Serializable
 data class Mail(val account: String, val from: String, val subject: String, val received: Long, val snippet: String,
-                val bulk: Boolean = false, val url: String = "")
+                val bulk: Boolean = false, val url: String = "", val read: Boolean = false)
 
 object MailAccounts {
     private val dir get() = File(Daybreak.platform.home, "secrets/mail")
@@ -63,13 +63,15 @@ object MailReader {
             try {
                 val msgs = inbox.search(javax.mail.search.ReceivedDateTerm(javax.mail.search.ComparisonTerm.GE, Date.from(since)))
                     .sortedByDescending { it.receivedDate ?: it.sentDate }.take(limit)
-                val fp = javax.mail.FetchProfile().apply { add(javax.mail.FetchProfile.Item.ENVELOPE); add("List-Unsubscribe"); add("Precedence") }
+                val fp = javax.mail.FetchProfile().apply { add(javax.mail.FetchProfile.Item.ENVELOPE); add(javax.mail.FetchProfile.Item.FLAGS); add("List-Unsubscribe"); add("Precedence") }
                 inbox.fetch(msgs.toTypedArray(), fp)
                 return msgs.mapNotNull { m ->
                     runCatching {
                         val from = (m.from?.firstOrNull() as? javax.mail.internet.InternetAddress)?.let { it.personal?.let { p -> "$p <${it.address}>" } ?: it.address } ?: "?"
                         val bulk = m.getHeader("List-Unsubscribe") != null || m.getHeader("Precedence")?.any { it.contains("bulk", true) || it.contains("list", true) } == true
-                        Mail(a.email, from, m.subject ?: "(no subject)", (m.receivedDate ?: m.sentDate)?.time ?: 0, if (bulk) "" else snippet(m), bulk)
+                        val read = m.isSet(javax.mail.Flags.Flag.SEEN)
+                        // Unread ones only need their text (reading it over IMAP would also mark them read: we open read-only).
+                        Mail(a.email, from, m.subject ?: "(no subject)", (m.receivedDate ?: m.sentDate)?.time ?: 0, if (bulk || read) "" else snippet(m), bulk, read = read)
                     }.getOrNull()
                 }
             } finally { inbox.close(false) }
@@ -136,14 +138,15 @@ object Outlook {
         t["refresh_token"]?.jsonPrimitive?.content?.let { if (it != a.refreshToken) MailAccounts.save(a.copy(refreshToken = it)) }
         val access = t["access_token"]!!.jsonPrimitive.content
         val url = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?\$top=$limit&\$orderby=receivedDateTime%20desc" +
-            "&\$filter=receivedDateTime%20ge%20${since}&\$select=subject,from,receivedDateTime,bodyPreview,inferenceClassification,webLink"
+            "&\$filter=receivedDateTime%20ge%20${since}&\$select=subject,from,receivedDateTime,bodyPreview,inferenceClassification,webLink,isRead"
         return Http.jsonOf(url, mapOf("Authorization" to "Bearer $access")).jsonObject["value"]?.jsonArray.orEmpty().map { m ->
             val o = m.jsonObject
             val f = o["from"]?.jsonObject?.get("emailAddress")?.jsonObject
             val name = f?.get("name")?.jsonPrimitive?.content; val addr = f?.get("address")?.jsonPrimitive?.content ?: "?"
             Mail(a.email, if (name != null && name != addr) "$name <$addr>" else addr, o["subject"]?.jsonPrimitive?.content ?: "(no subject)",
                 Instant.parse(o["receivedDateTime"]!!.jsonPrimitive.content).toEpochMilli(), o["bodyPreview"]?.jsonPrimitive?.content.orEmpty().take(1000),
-                bulk = o["inferenceClassification"]?.jsonPrimitive?.content == "other", url = o["webLink"]?.jsonPrimitive?.content.orEmpty())
+                bulk = o["inferenceClassification"]?.jsonPrimitive?.content == "other", url = o["webLink"]?.jsonPrimitive?.content.orEmpty(),
+                read = o["isRead"]?.jsonPrimitive?.content == "true")
         }
     }
 }

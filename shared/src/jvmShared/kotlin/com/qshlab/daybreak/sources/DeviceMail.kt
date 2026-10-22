@@ -75,6 +75,15 @@ object SharedMail {
         Daybreak.sync.kickSoon()
     }
 
+    /** A notification went away (you opened, read or dismissed the email): treat it as read. */
+    @Synchronized fun markRead(kind: String, from: String, subject: String) {
+        val box = mine(kind) ?: return
+        if (box.items.none { it.from == from && norm(it.subject) == norm(subject) && !it.read }) return
+        file(kind).writeJson(box.copy(at = System.currentTimeMillis(),
+            items = box.items.map { if (it.from == from && norm(it.subject) == norm(subject)) it.copy(read = true) else it }))
+        Daybreak.sync.kickSoon()
+    }
+
     private fun trim(items: List<Mail>): List<Mail> {
         val cutoff = System.currentTimeMillis() - KEEP_DAYS * 86400_000L
         return items.filter { it.received > cutoff }.sortedByDescending { it.received }.take(KEEP_MAX)

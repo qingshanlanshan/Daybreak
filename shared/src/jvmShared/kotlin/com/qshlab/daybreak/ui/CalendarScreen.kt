@@ -78,6 +78,7 @@ fun CalendarScreen(onSettings: (() -> Unit)?, startView: CalView = CalView.Month
     var editing by remember { mutableStateOf<EventTarget?>(null) }
     var showing by remember { mutableStateOf<Occurrence?>(null) }
     var task by remember { mutableStateOf<TaskRef?>(null) }
+    var newTask by remember { mutableStateOf<TaskRef?>(null) }
     var managing by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { withContext(Dispatchers.IO) { Cal.refreshSubscriptions() } }
 
@@ -114,7 +115,10 @@ fun CalendarScreen(onSettings: (() -> Unit)?, startView: CalView = CalView.Month
                 IconButton({ step(1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next") }
             }
             when (view) {
-                CalView.Month -> MonthGrid(anchor, from, occ, tasks, onDay = { anchor = it; view = CalView.Day }, onOpen = { showing = it }, onTask = { task = it })
+                // Tapping a day in the month adds a task due then (the Day view is one tap away at the top).
+                CalView.Month -> MonthGrid(anchor, from, occ, tasks, onDay = { d ->
+                    newTask = TaskRef(com.qshlab.daybreak.cal.Cal.DEFAULT_LIST, com.qshlab.daybreak.cal.newId(), com.qshlab.daybreak.cal.Task("", due = d.toString()))
+                }, onOpen = { showing = it }, onTask = { task = it })
                 CalView.Week -> TimeGrid((0 until 7).map { from.plusDays(it.toLong()) }, occ, tasks, ::newAt, { showing = it }, { task = it }, onDay = { anchor = it; view = CalView.Day })
                 CalView.Day -> TimeGrid(listOf(anchor), occ, tasks, ::newAt, { showing = it }, { task = it })
             }
@@ -123,6 +127,7 @@ fun CalendarScreen(onSettings: (() -> Unit)?, startView: CalView = CalView.Month
     showing?.let { o -> EventDetails(o, onClose = { showing = null }, onEdit = { showing = null; editing = EventTarget.of(o) }) }
     editing?.let { EventEditor(it, onDone = { editing = null }) }
     task?.let { TaskEditor(it, onDone = { task = null }) }
+    newTask?.let { TaskEditor(it, onDone = { newTask = null }, isNew = true) }
     if (managing) CalendarsSheet(onDismiss = { managing = false })
 }
 

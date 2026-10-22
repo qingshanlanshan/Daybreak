@@ -265,6 +265,8 @@ fun EmailSection() {
             }
             Switch(on, { SharedMail.setEnabled(it) })
         }
+        if (on && mine != null && mine.items.isNotEmpty()) Hint("From: " + mine.items.groupingBy { it.account.ifBlank { "?" } }.eachCount().entries
+            .sortedByDescending { it.value }.joinToString(" · ") { "${it.key} (${it.value})" })
         if (mac) {
             Hint("Reads the inbox of every account in Apple Mail, school or work Outlook included. macOS asks once to let Daybreak control Mail. If Mail isn't open, Daybreak opens it in the background before a feed update so it fetches new mail, then quits it again.")
             if (on) OutlinedButton({
@@ -286,7 +288,8 @@ fun EmailSection() {
         Text("From your other devices", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
         for (b in others) Column {
             Text((if (b.kind == "applemail") "Apple Mail" else "Mail notifications") + " on " + b.deviceName)
-            Hint("${b.items.size} email${if (b.items.size == 1) "" else "s"} · ${ago(b.at / 1000.0)}" + (b.error?.let { " · $it" } ?: ""))
+            Hint("${b.items.size} email${if (b.items.size == 1) "" else "s"} · ${ago(b.at / 1000.0)}" + (b.error?.let { " · $it" } ?: "") +
+                b.items.groupingBy { it.account.ifBlank { "?" } }.eachCount().entries.sortedByDescending { it.value }.joinToString(" · ", prefix = "\nFrom: ") { "${it.key} (${it.value})" })
         }
     } else if (!mac && Daybreak.sync.config.value == null) Hint("With Sync on, your phone's feed also gets the whole emails your Mac reads in Apple Mail.")
 

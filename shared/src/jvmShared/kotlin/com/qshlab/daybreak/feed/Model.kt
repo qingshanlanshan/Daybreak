@@ -96,4 +96,5 @@ data class Collected(
     val tasks: List<String> = emptyList(),
     val web: String = "",
     val errors: List<String> = emptyList(),
+    val newSince: Long = 0,     // emails received after this are new since the previous feed
 )

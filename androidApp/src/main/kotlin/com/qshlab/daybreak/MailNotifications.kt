@@ -44,15 +44,27 @@ class NotificationMail(private val ctx: Context) : DeviceMail {
 class MailListener : NotificationListenerService() {
     private val io = Executors.newSingleThreadExecutor()
 
+    /** "Outlook" / "Gmail", or null for other apps. Debug builds also take test notifications from `adb shell cmd notification post`. */
+    private fun appName(sbn: StatusBarNotification): String? = MAIL_APPS[sbn.packageName]
+        ?: "Test".takeIf { sbn.packageName == "com.android.shell" && applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0 }
+
     override fun onListenerConnected() {
         // Mail already waiting in the notification shade.
         runCatching { activeNotifications }.getOrNull()?.forEach(::onNotificationPosted)
     }
 
+    /** A mail notification went away: you opened or read the email (here or elsewhere), or dismissed it. */
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        if (appName(sbn) == null) return
+        val e = sbn.notification.extras
+        val from = e.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
+        val subject = e.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()?.lineSequence()?.firstOrNull()?.trim().orEmpty()
+        if (from.isEmpty()) return
+        io.execute { runCatching { SharedMail.markRead(KIND, from, subject.ifEmpty { "(no subject)" }) } }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        // Debug builds also take test notifications posted with `adb shell cmd notification post`.
-        val debug = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
-        val app = MAIL_APPS[sbn.packageName] ?: (if (debug && sbn.packageName == "com.android.shell") "Test" else return)
+        val app = appName(sbn) ?: return
         val n = sbn.notification
         if (n.flags and (Notification.FLAG_GROUP_SUMMARY or Notification.FLAG_ONGOING_EVENT) != 0) return
         if (n.category != null && n.category != Notification.CATEGORY_EMAIL) return   // reminders, "sending…", sync status

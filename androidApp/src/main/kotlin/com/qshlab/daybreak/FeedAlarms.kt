@@ -63,3 +63,31 @@ class FeedJob : JobService() {
 
     override fun onStopJob(params: JobParameters) = true
 }
+
+/**
+ * About every 30 minutes (when Android allows, with a network): sync, so a feed your Mac wrote arrives with a
+ * notification, and the widget stays current, even when Daybreak isn't open.
+ */
+object SyncJob {
+    private const val ID = 43
+    fun schedule(ctx: Context) {
+        val js = ctx.getSystemService(JobScheduler::class.java)
+        if (js.getPendingJob(ID) != null) return
+        js.schedule(JobInfo.Builder(ID, ComponentName(ctx, SyncJobService::class.java))
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPeriodic(30 * 60_000L).setPersisted(true).build())
+    }
+}
+
+class SyncJobService : JobService() {
+    override fun onStartJob(params: JobParameters): Boolean {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            runCatching { if (com.qshlab.daybreak.Daybreak.sync.config.value != null) com.qshlab.daybreak.Daybreak.sync.runOnce() }
+            runCatching { FeedEngine.announce() }
+            MonthWidget.refresh(applicationContext)
+            jobFinished(params, false)
+        }
+        return true
+    }
+
+    override fun onStopJob(params: JobParameters) = true
+}

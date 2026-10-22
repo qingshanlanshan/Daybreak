@@ -6,6 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyShortcut
+import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
@@ -39,6 +42,9 @@ class MacPlatform : Platform {
     override fun openUrl(url: String) { ProcessBuilder("open", url).start() }
     /** Apple Mail only in the real app (not when run from source for tests, which must never read your mail). */
     override val deviceMail = com.qshlab.daybreak.sources.AppleMail(File(home, "local")).takeIf { bundle != null }
+    /** The window is open (closing it keeps Daybreak running in the background). */
+    @Volatile var shown = true
+    override val onScreen get() = shown
     override fun copyText(text: String) { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null) }
 
     override fun notify(id: String, title: String, body: String) { notifier.show(id, title, body) }
@@ -94,7 +100,7 @@ fun main(args: Array<String>) {
         val b = com.qshlab.daybreak.sources.SharedMail.mine("applemail")
         File(platform.home, "local/mailcheck.txt").apply { parentFile.mkdirs() }.writeText(
             "emails=${b?.items?.size} accounts=${b?.items?.map { it.account.length }?.distinct()} withText=${b?.items?.count { it.snippet.isNotBlank() }} " +
-            "bulk=${b?.items?.count { it.bulk }} links=${b?.items?.count { it.url.startsWith("message://") }} error=${b?.error} ms=${com.qshlab.daybreak.sources.AppleMail.lastTiming}\n")
+            "bulk=${b?.items?.count { it.bulk }} unread=${b?.items?.count { !it.read }} links=${b?.items?.count { it.url.startsWith("message://") }} error=${b?.error} ms=${com.qshlab.daybreak.sources.AppleMail.lastTiming}\n")
         kotlin.system.exitProcess(0)
     }
     platform.notifier.start()
@@ -117,6 +123,10 @@ fun main(args: Array<String>) {
             kotlinx.coroutines.delay(60_000)
         }
     }
+    // A new feed written while the window is closed, or by your phone: a notification.
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        com.qshlab.daybreak.data.Changes.version.collect { kotlinx.coroutines.delay(2000); runCatching { com.qshlab.daybreak.feed.FeedEngine.announce() } }
+    }
     // Your phone can ask this Mac to write the feed (it has Apple Mail).
     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { com.qshlab.daybreak.feed.FeedEngine.answerRequests() }
     Thread { runBlocking { Updates.check() } }.start()
@@ -132,7 +142,11 @@ fun main(args: Array<String>) {
         val state = rememberWindowState(width = 1180.dp, height = 780.dp, position = WindowPosition.PlatformDefault)
         Window(onCloseRequest = { visible = false }, visible = visible, state = state, title = "Daybreak") {
             window.minimumSize = java.awt.Dimension(720, 480)
-            LaunchedEffect(visible) { if (visible) { window.toFront(); Daybreak.sync.kick() } }
+            LaunchedEffect(visible) { platform.shown = visible; if (visible) { window.toFront(); Daybreak.sync.kick() } }
+            // ⌘W closes the window like the red button (Daybreak keeps running; the Dock icon brings it back).
+            MenuBar {
+                Menu("File") { Item("Close Window", shortcut = KeyShortcut(Key.W, meta = true), onClick = { visible = false }) }
+            }
             DaybreakApp()
         }
     }

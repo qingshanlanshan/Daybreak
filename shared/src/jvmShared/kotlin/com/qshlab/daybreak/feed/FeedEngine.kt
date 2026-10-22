@@ -92,6 +92,9 @@ object FeedEngine {
           payment, a form, an RSVP, preparing for an appointment) and it isn't already among their tasks, suggest
           one task: a short imperative title ("Submit the ethics form") and the due date as "YYYY-MM-DD", or
           "YYYY-MM-DDTHH:MM" when a time is known, or "" when there's no date. Otherwise both "".
+        - Email covers the last two days. Emails marked NEW arrived since the previous feed. Mention an older one only if it
+          still matters now (a deadline coming up, a request still waiting for the user, something happening today).
+          [account] is the mailbox it came to (e.g. the user's school or work address, or Gmail).
         - Take the user's reactions to earlier cards seriously: avoid what they marked 👎 (and why), keep doing what
           they liked.
         - The brief: 2–4 friendly sentences, the day at a glance (what's coming, what needs doing, anything to
@@ -136,7 +139,9 @@ object FeedEngine {
         if (c.tasks.isNotEmpty()) { appendLine("\n## Tasks"); c.tasks.forEachIndexed { i, t -> appendLine("T${i + 1} $t") } }
         if (c.mail.isNotEmpty()) { appendLine("\n## Email (newest first, read-only)"); c.mail.forEachIndexed { i, m ->
             val age = ago(m.received)
-            appendLine(if (m.bulk) "M${i + 1} [newsletter/promotion] from ${m.from}: ${m.subject} ($age)" else "M${i + 1} from ${m.from}: ${m.subject} ($age) — ${m.snippet.take(600)}") } }
+            val new = if (c.newSince > 0 && m.received >= c.newSince) "NEW " else ""
+            val to = if (m.account.isNotBlank()) " [${m.account}]" else ""
+            appendLine(if (m.bulk) "M${i + 1} ${new}[newsletter/promotion]$to from ${m.from}: ${m.subject} ($age)" else "M${i + 1} $new$to from ${m.from}: ${m.subject} ($age) — ${m.snippet.take(600)}") } }
         if (c.news.isNotEmpty()) { appendLine("\n## News"); c.news.forEachIndexed { i, n ->
             appendLine("N${i + 1} [${n.via}] ${n.title} — ${n.source}${if (n.published > 0) " (${ago(n.published)})" else ""}${if (n.summary.isNotBlank()) ": ${n.summary.take(300)}" else ""}") } }
         if (c.web.isNotBlank()) { appendLine("\n## Web search notes"); appendLine(c.web) }
@@ -170,10 +175,13 @@ object FeedEngine {
                 if (Places.list().any { it.current } && (Places.here()?.let { System.currentTimeMillis() - it.at > 3 * 3600_000L } != false))
                     runCatching { _state.value = EngineState(true, "Finding where you are…"); Places.locate().getOrThrow() }
                         .onFailure { Places.lastError = it.message }.onSuccess { Places.lastError = null }
-                var c = if (reuse) collected() ?: Collector.collect(cfg, since()) else {
+                // The last two days of mail; what came since the previous feed is marked new.
+                val mailSince = Instant.now().minusSeconds(2 * 86400)
+                var c = if (reuse) collected() ?: Collector.collect(cfg, mailSince) else {
                     _state.value = EngineState(true, "Reading your email, calendar, weather and news…")
-                    Collector.collect(cfg, since())
+                    Collector.collect(cfg, mailSince)
                 }
+                if (!reuse) c = c.copy(newSince = since().toEpochMilli())
                 if (!reuse && cfg.searches.isNotEmpty()) {
                     _state.value = EngineState(true, "Searching the web…")
                     val web = runCatching {
@@ -233,6 +241,25 @@ object FeedEngine {
             handled = at
             if (System.currentTimeMillis() - at < 5 * 60_000L && (current()?.generatedAt ?: 0) < at && Claude.key != null) refresh()
         }
+    }
+
+    @Serializable private data class Announced(val at: Long = 0)
+    private val announcedFile get() = File(home, "local/feed-announced.json")
+
+    /**
+     * A notification for a feed this device hasn't announced yet: written here in the background or by your other
+     * device. Not while Daybreak is on screen (you see it), not on devices set to stay quiet, and once per feed.
+     * [scheduled]: at an update time, announce even if Daybreak is open.
+     */
+    @Synchronized fun announce(scheduled: Boolean = false) {
+        val f = current() ?: return
+        val last = announcedFile.readJson<Announced>()?.at
+        if (last != null && f.generatedAt <= last) return
+        if (Daybreak.platform.onScreen && !scheduled) { announcedFile.writeJson(Announced(f.generatedAt)); return }
+        announcedFile.writeJson(Announced(f.generatedAt))
+        if (last == null || System.currentTimeMillis() - f.generatedAt > 6 * 3600_000L) return   // first run, or an old feed
+        val s = config().schedule
+        if (s.notify && Daybreak.sync.deviceId !in s.quietDevices) Daybreak.platform.notify("feed", "Your Daybreak", f.brief.take(240))
     }
 
     /** Mail since the last feed (a little overlap), at most three days back. */
@@ -376,7 +403,7 @@ object FeedEngine {
             val f = current()?.takeIf { it.generatedAt >= slotMs }
             // No feed yet (another device is still writing it): try again later, up to half an hour after the time.
             if (f != null || now.isAfter(slot.plusMinutes(30))) {
-                if (f != null && s.notify && Daybreak.sync.deviceId !in s.quietDevices) Daybreak.platform.notify("feed-$slot", "Your Daybreak", f.brief.take(240))
+                announce(scheduled = true)
                 doneFile.writeJson((doneFile.readJson<Done>() ?: Done()).copy(notified = slot.toString()))
             }
         }

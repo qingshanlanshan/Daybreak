@@ -106,6 +106,7 @@ class AppleMail(private val work: File) : DeviceMail {
               lap("find");
               if (!dates.length) return JSON.stringify({ items: [], ms: ms });
               const subjects = spec.subject(), senders = spec.sender(), ids = spec.messageId();
+              let reads = []; try { reads = spec.readStatus(); } catch (e) {}
               lap("fields");
               const order = dates.map((d, i) => [d.getTime(), i]).sort((a, b) => b[0] - a[0]).slice(0, limit);
               const out = [];
@@ -123,7 +124,7 @@ class AppleMail(private val work: File) : DeviceMail {
                   fetched++;
                 }
                 out.push({ account: String(account || ""), from: String(senders[i] || "?"), subject: String(subjects[i] || "(no subject)"),
-                           received: time, snippet: body, bulk: bulk, url: url });
+                           received: time, snippet: body, bulk: bulk, read: reads[i] === true, url: url });
               }
               lap("text"); ms.fetched = fetched;
               return JSON.stringify({ items: out, ms: ms });

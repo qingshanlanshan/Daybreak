@@ -63,7 +63,8 @@ class MainActivity : ComponentActivity() {
         i?.removeExtra(EXTRA_NEW_TASK); i?.removeExtra(EXTRA_OPEN)
     }
 
-    override fun onStart() { super.onStart(); Daybreak.sync.kick() }
+    override fun onStart() { super.onStart(); (Daybreak.platform as AndroidPlatform).shown++; Daybreak.sync.kick() }
+    override fun onStop() { (Daybreak.platform as AndroidPlatform).shown--; super.onStop() }
 
     override fun onDestroy() {
         (Daybreak.platform as AndroidPlatform).scanner = null

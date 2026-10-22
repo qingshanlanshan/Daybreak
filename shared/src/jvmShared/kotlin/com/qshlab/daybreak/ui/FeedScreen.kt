@@ -272,8 +272,13 @@ private fun SourcesSheet(onClose: () -> Unit) {
         if (c.weather.isNotEmpty()) { Text("Weather", fontWeight = FontWeight.SemiBold); c.weather.forEach { w ->
             Text("${Weather.icon(w.code)} ${w.place}: ${w.now}"); Hint("Today ${w.today}" + (w.air?.let { " · $it" } ?: "") + (if (w.nextHours.isNotEmpty()) "\n" + w.nextHours.joinToString(", ") else "")) } }
         if (c.events.isNotEmpty() || c.tasks.isNotEmpty()) { Text("Calendar & tasks", fontWeight = FontWeight.SemiBold); (c.events + c.tasks).forEach { Hint("• $it") } }
-        if (c.mail.isNotEmpty()) { Text("Email (${c.mail.size})", fontWeight = FontWeight.SemiBold); c.mail.forEach { m ->
-            Hint((if (m.bulk) "[newsletter] " else "") + m.from.substringBefore(" <") + " — " + m.subject) } }
+        if (c.mail.isNotEmpty()) {
+            Text("Email (${c.mail.size}, last two days)", fontWeight = FontWeight.SemiBold)
+            Hint("By mailbox: " + c.mail.groupingBy { it.account.ifBlank { "?" } }.eachCount().entries.sortedByDescending { it.value }.joinToString(" · ") { "${it.key} ${it.value}" })
+            c.mail.forEach { m ->
+                Hint((if (c.newSince > 0 && m.received >= c.newSince) "• new · " else "") + (if (m.bulk) "[newsletter] " else "") + m.from.substringBefore(" <") + " — " + m.subject)
+            }
+        }
         if (c.news.isNotEmpty()) { Text("News (${c.news.size})", fontWeight = FontWeight.SemiBold); c.news.forEach { n -> Hint("• [${n.via}] ${n.title} — ${n.source}") } }
         if (c.web.isNotBlank()) { Text("Web searches", fontWeight = FontWeight.SemiBold); Hint(c.web) }
         HorizontalDivider()

@@ -20,11 +20,13 @@ class DaybreakApplication : Application() {
         Alarms.channels(this)
         Alarms.reschedule(this)
         FeedAlarms.schedule(this)
+        SyncJob.schedule(this)
         // Re-plan reminders a moment after data changes (edits here or from sync).
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
             com.qshlab.daybreak.data.Changes.version.drop(1).debounce(2000).collect {
                 Alarms.reschedule(this@DaybreakApplication); FeedAlarms.schedule(this@DaybreakApplication)
                 MonthWidget.refresh(this@DaybreakApplication)   // the home-screen month shows events and due tasks
+                com.qshlab.daybreak.feed.FeedEngine.announce()    // a new feed (e.g. from the Mac): a notification
             }
         }
     }
@@ -38,6 +40,9 @@ class AndroidPlatform(private val app: Application) : Platform {
     override val appVersion: String = app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "?"
     override val updater = AndroidUpdater(app)
     override val deviceMail = NotificationMail(app)
+    /** Activities showing now (MainActivity counts itself in onStart/onStop). */
+    @Volatile var shown = 0
+    override val onScreen get() = shown > 0
     override val addWidget: (() -> Unit) = {
         val awm = android.appwidget.AppWidgetManager.getInstance(app)
         if (awm.isRequestPinAppWidgetSupported) awm.requestPinAppWidget(android.content.ComponentName(app, MonthWidgetReceiver::class.java), null, null)

@@ -28,7 +28,7 @@ object Alarms {
     fun channels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Reminders", NotificationManager.IMPORTANCE_HIGH).apply { description = "Event alerts and task reminders" })
-        nm.createNotificationChannel(NotificationChannel("feed", "Your feed", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "Your scheduled feed" })
+        nm.createNotificationChannel(NotificationChannel("feed", "Your feed", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "When your feed is updated" })
     }
 
     fun reschedule(ctx: Context) {
