@@ -92,6 +92,10 @@ are not in git.
 `~/Library/Application Support/Daybreak` on the Mac, the app's own storage on Android: plain JSON
 files. Everything there syncs except `.sync/` and `local/` (each device's own state).
 
+## License
+
+MIT ([LICENSE](LICENSE)).
+
 ---
 
 More from qshlab: <https://qshlab.com>
