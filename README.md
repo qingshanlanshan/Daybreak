@@ -1,6 +1,6 @@
 # Daybreak
 
-A calendar with tasks, and a personal feed: Claude reads your weather, local news, unread email and
+A calendar with tasks, and a personal feed: an AI of your choice (Claude, GPT or DeepSeek) reads your weather, local news, unread email and
 calendar, and tells you what matters to you today. Tell it what to focus on, and it learns. For Mac and
 Android, kept in step through your own storage, end-to-end encrypted.
 
@@ -23,7 +23,8 @@ update themselves.
   reason, steers later feeds.
 - A card can suggest a task ("Submit the ethics form · due Fri") to add with one tap.
 - Each card names its sources; they open the article, or the email in Apple Mail.
-- You choose when it updates (each update costs a little with Claude) and which devices notify you.
+- You choose the AI and model (Claude, GPT or DeepSeek, with your own API key), when it updates (each
+  update costs a little) and which devices notify you. Web searches need Claude or GPT.
 
 **Email, without signing in anywhere**
 - **Mac**: reads the inbox of every account in Apple Mail (school or work Outlook included), read-only.
@@ -43,8 +44,8 @@ every device gets a notification when a new feed arrives.
 
 - No Daybreak server and no account. Your data lives on your devices, and in your own bucket if you turn
   on sync, encrypted on the device first (AES-256-GCM, key shared only through the pairing code).
-- Writing the feed sends text to Anthropic's API with your own key: weather, headlines, your events and
-  tasks, and the subject and first lines of unread emails. Nothing is sent without a key, and Anthropic
+- Writing the feed sends text to the AI you chose (Anthropic, OpenAI or DeepSeek), with your own key: weather,
+  headlines, your events and tasks, and the subject and first lines of unread emails. Nothing is sent without a key. Anthropic
   doesn't train on API data.
 - Email is read-only; Daybreak never sends, deletes or marks anything.
 
@@ -55,7 +56,8 @@ Kotlin and Compose Multiplatform, one code base for both apps:
 ```
 shared/       almost everything (the jvmShared source set; both targets run on the JVM)
   cal/          calendars, events, recurrence, .ics, tasks
-  feed/         the feed: collecting sources, the Claude calls (Anthropic Java SDK), schedule
+  feed/         the feed: collecting sources, the AI calls (Ai.kt: Claude via the Anthropic Java SDK; GPT and
+                DeepSeek over their chat completions API), schedule
   sources/      weather, news, places, mail (IMAP, Outlook, Apple Mail, notifications)
   sync/         encrypted sync over S3 (Cloudflare R2), leases, device heartbeat
   update/       in-app updates (Android installer; Mac: verify signature, swap, relaunch)
@@ -75,7 +77,7 @@ sh mac/build.sh                        # signed Daybreak.app, dmg, update zip, m
 Needs JDK 17 and the Android SDK.
 
 Dev tools (`desktopApp/src/snapshot`), all against throwaway data: `:desktopApp:snapshot` renders screens
-to PNGs; `calcheck` tests the calendar; `feedcheck` runs a whole feed update against a stand-in Claude
+to PNGs; `calcheck` tests the calendar; `feedcheck` and `aicheck` run whole feed updates against stand-ins for Claude and for GPT / DeepSeek
 (`DAYBREAK_CLAUDE_URL`); `synccheck` and `requestcheck` drive sync between two test devices against a local
 S3 server; `mailmergecheck`, `locatecheck` and `updatecheck` test those parts.
 

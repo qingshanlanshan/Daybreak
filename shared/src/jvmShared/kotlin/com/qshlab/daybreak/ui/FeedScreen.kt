@@ -65,7 +65,6 @@ import androidx.compose.ui.unit.sp
 import com.qshlab.daybreak.Daybreak
 import com.qshlab.daybreak.data.Changes
 import com.qshlab.daybreak.feed.Card
-import com.qshlab.daybreak.feed.Claude
 import com.qshlab.daybreak.feed.FeedEngine
 import com.qshlab.daybreak.sources.Weather
 import kotlinx.coroutines.launch
@@ -87,7 +86,7 @@ fun FeedScreen(onSettings: (() -> Unit)?, openSettings: () -> Unit) {
     val chat = remember(version) { FeedEngine.chat() }
     val reactions = remember(version) { FeedEngine.feedback().associateBy { it.title } }
     val placeOrder = remember(version) { com.qshlab.daybreak.sources.Places.resolved().map { it.name } }
-    val hasKey = remember(version) { Claude.key != null }
+    val hasKey = remember(version) { com.qshlab.daybreak.feed.Ai.ready }
     // Android's battery optimisation: looked at again every few seconds (it's changed in a system dialog).
     var limited by remember { mutableStateOf(Daybreak.platform.backgroundLimited) }
     androidx.compose.runtime.LaunchedEffect(limited) { while (limited) { kotlinx.coroutines.delay(2000); limited = Daybreak.platform.backgroundLimited } }
@@ -109,7 +108,7 @@ fun FeedScreen(onSettings: (() -> Unit)?, openSettings: () -> Unit) {
                     }
                 }
                 if (!hasKey) item {
-                    Notice("Add your Claude API key to get your feed", "Daybreak reads your email, calendar, weather and news, and Claude writes what matters to you. The key is stored on your devices only.") {
+                    Notice("Add an AI key to get your feed", "Daybreak reads your email, calendar, weather and news, and an AI of your choice (Claude, GPT or DeepSeek) writes what matters to you. The key is stored on your devices only.") {
                         Button(openSettings) { Text("Open Settings") }
                     }
                 }

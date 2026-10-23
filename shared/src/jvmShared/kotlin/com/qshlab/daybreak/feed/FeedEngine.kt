@@ -179,7 +179,7 @@ object FeedEngine {
         withContext(Dispatchers.IO) {
             runCatching {
                 val cfg = config()
-                if (Claude.key == null) throw ClaudeError("Add your Claude API key in Settings to get your feed.")
+                if (!Ai.ready) throw Ai.noKey()
                 if (Places.list().any { it.current } && (Places.here()?.let { System.currentTimeMillis() - it.at > 3 * 3600_000L } != false))
                     runCatching { _state.value = EngineState(true, "Finding where you are…"); Places.locate().getOrThrow() }
                         .onFailure { Places.lastError = it.message }.onSuccess { Places.lastError = null }
@@ -190,10 +190,12 @@ object FeedEngine {
                     Collector.collect(cfg, mailSince)
                 }
                 if (!reuse) c = c.copy(newSince = since().toEpochMilli())
-                if (!reuse && cfg.searches.isNotEmpty()) {
+                if (!reuse && cfg.searches.isNotEmpty() && !Ai.provider().webSearch)
+                    c = c.copy(errors = c.errors + "Web searches: ${Ai.provider().name} can't search the web (Claude and GPT can)")
+                if (!reuse && cfg.searches.isNotEmpty() && Ai.provider().webSearch) {
                     _state.value = EngineState(true, "Searching the web…")
                     val web = runCatching {
-                        Claude.ask(cfg.model, "You research things for the user's personal feed. Search the web and report briefly, with dates and sources, what's new in the last day or two on each question. Plain text, a few lines per question. Today is ${LocalDate.now()}.",
+                        Ai.ask("You research things for the user's personal feed. Search the web and report briefly, with dates and sources, what's new in the last day or two on each question. Plain text, a few lines per question. Today is ${LocalDate.now()}.",
                             cfg.searches.joinToString("\n") { "- $it" } + (Places.resolved().firstOrNull()?.let { "\n(The user is in ${it.name}.)" } ?: ""),
                             effort = "low", maxTokens = 4000, webSearches = (cfg.searches.size * 2).coerceAtMost(8)).text
                     }.getOrElse { "(web search failed: ${it.message})" }
@@ -201,10 +203,10 @@ object FeedEngine {
                 }
                 File(home, "local/collected.json").writeJson(c)
                 _state.value = EngineState(true, "Writing your feed…")
-                val r = Claude.ask(cfg.model, instructions(profile()), material(c, cfg, focus), feedSchema, effort = "low")
+                val r = Ai.ask(instructions(profile()), material(c, cfg, focus), feedSchema, effort = "low")
                 val out = json.decodeFromString<FeedOut>(r.text)
                 val result = FeedResult(out.brief, out.cards.sortedBy { it.priority }.map { it.copy(sources = sources(it, c)) }, System.currentTimeMillis(),
-                    Daybreak.sync.deviceId, cfg.model, r.costUsd, focus, c.at)
+                    Daybreak.sync.deviceId, Ai.model(cfg).id, r.costUsd, focus, c.at)
                 current()?.let { prev -> File(home, "feed/history/${prev.generatedAt}.json").writeJson(prev) }
                 File(home, "feed/history").listFiles().orEmpty().sortedBy { it.name }.dropLast(14).forEach { it.delete() }
                 File(home, "feed/current.json").writeJson(result)
@@ -247,7 +249,7 @@ object FeedEngine {
             val at = withContext(Dispatchers.IO) { Daybreak.sync.feedRequest() } ?: continue
             if (at <= handled) continue
             handled = at
-            if (System.currentTimeMillis() - at < 5 * 60_000L && (current()?.generatedAt ?: 0) < at && Claude.key != null) refresh()
+            if (System.currentTimeMillis() - at < 5 * 60_000L && (current()?.generatedAt ?: 0) < at && Ai.ready) refresh()
         }
     }
 
@@ -295,7 +297,7 @@ object FeedEngine {
     /** One message to the assistant: answers it, and changes the profile / sources / current feed if asked. */
     suspend fun say(message: String): Result<ChatOut> = withContext(Dispatchers.IO) {
         runCatching {
-            if (Claude.key == null) throw ClaudeError("Add your Claude API key in Settings first.")
+            if (!Ai.ready) throw Ai.noKey()
             _state.value = EngineState(true, "Thinking…")
             val cfg = config()
             val history = chat().takeLast(12)
@@ -307,7 +309,7 @@ object FeedEngine {
                   "profile", in the user's words where possible, short bullet points; "" = leave unchanged). Use this for
                   lasting preferences ("never show promotions", "I care about my PhD and my family", "write in Chinese");
                 - change what it reads: news topics (Google News searches), RSS feeds (name + url, only real feed urls you
-                  are sure of), web searches (questions Claude researches each update; these cost extra, so suggest them
+                  are sure of), web searches (questions researched on the web each update; these cost extra, so suggest them
                   only when topics/feeds can't cover it). Use the add_/remove_ fields; remove by exact existing name/text;
                 - rewrite the current feed now (rewrite = true), with "focus" = a one-off emphasis for this version
                   (e.g. "only personal emails and weather"). Rewrite whenever the user asks to change the current feed,
@@ -328,7 +330,7 @@ object FeedEngine {
                 if (history.isNotEmpty()) { appendLine("Conversation so far:"); history.forEach { appendLine("${it.role}: ${it.text}") } }
                 appendLine("user: $message")
             }
-            val r = Claude.ask(cfg.model, stable, user, chatSchema, effort = "medium", maxTokens = 8000)
+            val r = Ai.ask(stable, user, chatSchema, effort = "medium", maxTokens = 8000)
             val out = json.decodeFromString<ChatOut>(r.text)
             val now = System.currentTimeMillis()
             File(home, "feed/chat.json").writeJson((chat() + ChatMsg("user", message, now) + ChatMsg("assistant", out.reply, now)).takeLast(30))
@@ -381,7 +383,7 @@ object FeedEngine {
     fun perDay(s: Schedule = config().schedule): Int = slots(LocalDate.now(), s).size
 
     /** Rough cost of one update with [model] (reading ~15k tokens of material, writing ~1.5k). */
-    fun estimate(modelId: String): Double = Claude.model(modelId).let { 15_000 / 1e6 * it.inPrice + 2_500 / 1e6 * it.outPrice } + config().searches.size * 0.03
+    fun estimate(m: AiModel = Ai.model()): Double = Ai.estimate(m) + if (Ai.provider(m.provider).webSearch) config().searches.size * 0.03 else 0.0
 
     @Serializable private data class Done(val generated: String = "", val notified: String = "")
     private val doneFile get() = File(home, "local/schedule.json")
@@ -409,7 +411,7 @@ object FeedEngine {
             if (!leaveToMac) {
                 when {
                     fresh -> BackgroundLog.add("${hm(slot)}: the feed was already written")
-                    Claude.key == null -> BackgroundLog.add("${hm(slot)}: no Claude key")
+                    !Ai.ready -> BackgroundLog.add("${hm(slot)}: no ${Ai.provider().name} API key")
                     !withContext(Dispatchers.IO) { Daybreak.sync.tryLease("feed", 600) } -> BackgroundLog.add("${hm(slot)}: another device is writing it")
                     else -> refresh().fold({ BackgroundLog.add("${hm(slot)}: wrote the feed") }, { BackgroundLog.add("${hm(slot)}: couldn't write the feed: ${it.message}") })
                 }

@@ -1,1 +1,1 @@
-Daybreak 1.0.6: the feed knows what you've answered (your sent mail and replies) and only shows unread email; the opening is now a short list; scheduled updates on Android run reliably while the phone sleeps (and Daybreak can ask to run in the background); a notification whenever a new feed arrives; tap a day in the month to add a task; home-screen month widget; ⌘W on the Mac.
+Daybreak 1.0.7: choose the AI that writes your feed: Claude, GPT or DeepSeek (Settings → AI), each with your own key.

@@ -45,6 +45,7 @@ fun main(args: Array<String>) {
             com.qshlab.daybreak.sources.MailBox.serializer(), com.qshlab.daybreak.sources.MailBox("notifications", "pixel", "Pixel 9", now - 600_000, false,
                 listOf(com.qshlab.daybreak.sources.Mail("Outlook", "IT Helpdesk", "Password expiry", now - 3600_000, "Your password expires")))))
     }
+    shot("phone-ai", 820, 2200) { com.qshlab.daybreak.ui.DaybreakTheme { com.qshlab.daybreak.ui.SettingsScreen({}, com.qshlab.daybreak.ui.SettingsPage.Claude) } }
     shot("mac-email", 2360, 1560) { com.qshlab.daybreak.ui.DaybreakTheme { com.qshlab.daybreak.ui.SettingsScreen({}, com.qshlab.daybreak.ui.SettingsPage.Email) } }
     println("snapshots in $out")
     exitProcess(0)

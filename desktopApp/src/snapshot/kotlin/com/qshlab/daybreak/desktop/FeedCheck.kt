@@ -6,7 +6,7 @@ import com.qshlab.daybreak.cal.Event
 import com.qshlab.daybreak.cal.Task
 import com.qshlab.daybreak.cal.newId
 import com.qshlab.daybreak.cal.str
-import com.qshlab.daybreak.feed.Claude
+import com.qshlab.daybreak.feed.Ai
 import com.qshlab.daybreak.feed.FeedEngine
 import com.qshlab.daybreak.sources.MailAccount
 import com.qshlab.daybreak.sources.MailAccounts
@@ -18,7 +18,7 @@ import kotlin.system.exitProcess
 /** Development: the whole feed flow against real weather/news and local stand-ins for mail and Claude. */
 fun main(@Suppress("UNUSED_PARAMETER") args: Array<String>): Unit = runBlocking {
     Daybreak.start(MacPlatform())
-    Claude.key = "sk-ant-test"
+    Ai.setKey("anthropic", "sk-ant-test")
     Places.save(Places.search("Singapore").take(1))
     if (MailAccounts.list().isEmpty()) MailAccounts.save(MailAccount("test", "imap", "me@example.com", host = "127.0.0.1", port = 3143, password = "apppass"))
     val today = LocalDate.now()
@@ -42,7 +42,7 @@ fun main(@Suppress("UNUSED_PARAMETER") args: Array<String>): Unit = runBlocking 
         println("tasks now: ${com.qshlab.daybreak.cal.Cal.tasks().map { it.task.title + "@" + it.task.due }}")
         if (out.rewrite) FeedEngine.refresh(out.focus, reuse = true).onSuccess { println("rewritten: ${it.brief}") }.onFailure { println("REWRITE FAILED: ${it.message}") }
     }
-    println("usage this month: ${Claude.thisMonth()}")
+    println("usage this month: ${Ai.thisMonth()}")
     println("next update: ${FeedEngine.nextSlot()}")
     exitProcess(0)
 }

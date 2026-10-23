@@ -98,3 +98,11 @@ tasks.register<JavaExec>("locatecheck") {
     mainClass.set("com.qshlab.daybreak.desktop.locatecheck.LocateCheckKt")
     environment("DAYBREAK_HOME", layout.buildDirectory.dir("locatecheck-home").get().asFile.path)
 }
+
+tasks.register<JavaExec>("aicheck") {
+    classpath = sourceSets["snapshot"].runtimeClasspath
+    mainClass.set("com.qshlab.daybreak.desktop.aicheck.AiCheckKt")
+    args(project.findProperty("provider") as String? ?: "openai", project.findProperty("model") as String? ?: "gpt-6.1-sol")
+    environment("DAYBREAK_HOME", layout.buildDirectory.dir("aicheck-home-" + (project.findProperty("provider") as String? ?: "openai")).get().asFile.path)
+    environment("DAYBREAK_AI_URL", "http://127.0.0.1:9300")
+}

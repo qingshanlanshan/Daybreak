@@ -59,7 +59,7 @@ import java.util.Date
 
 /** The sections of Settings: each is a row on the main page and opens its own page. */
 enum class SettingsPage(val title: String) {
-    Claude("Claude"), AboutMe("About me"), Schedule("Updates & notifications"), Places("Places"), Email("Email"),
+    Claude("AI"), AboutMe("About me"), Schedule("Updates & notifications"), Places("Places"), Email("Email"),
     Sources("What the feed reads"), Sync("Sync"), App("App updates")
 }
 
@@ -73,7 +73,7 @@ fun SettingsScreen(onBack: () -> Unit, start: SettingsPage? = null) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
                 Column(Modifier.widthIn(max = 720.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     when (p) {
-                        SettingsPage.Claude -> ClaudeSection()
+                        SettingsPage.Claude -> AiSection()
                         SettingsPage.AboutMe -> AboutMeSection()
                         SettingsPage.Schedule -> ScheduleSection()
                         SettingsPage.Places -> PlacesSection()
@@ -125,8 +125,8 @@ fun SettingsScreen(onBack: () -> Unit, start: SettingsPage? = null) {
 private fun summary(p: SettingsPage): Pair<String, Boolean> = runCatching {
     val cfg = com.qshlab.daybreak.feed.FeedEngine.config()
     when (p) {
-        SettingsPage.Claude -> if (com.qshlab.daybreak.feed.Claude.keyHint == null) "Add your API key to get your feed" to true
-            else com.qshlab.daybreak.feed.Claude.model(cfg.model).name to false
+        SettingsPage.Claude -> if (!com.qshlab.daybreak.feed.Ai.ready) "Add your ${com.qshlab.daybreak.feed.Ai.provider().name} API key to get your feed" to true
+            else com.qshlab.daybreak.feed.Ai.model(cfg).name to false
         SettingsPage.AboutMe -> com.qshlab.daybreak.feed.FeedEngine.profile().replace('\n', ' ').take(70).ifBlank { "Tell Daybreak what matters to you" } to false
         SettingsPage.Schedule -> cfg.schedule.let { s ->
             when (s.mode) { "manual" -> "Only when you ask"; "interval" -> "Every ${s.everyHours} hours"; else -> "At ${s.times.joinToString(", ")}" } +

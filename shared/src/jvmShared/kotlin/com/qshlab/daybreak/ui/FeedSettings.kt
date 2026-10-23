@@ -34,8 +34,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.qshlab.daybreak.Daybreak
 import com.qshlab.daybreak.data.Changes
-import com.qshlab.daybreak.feed.CLAUDE_MODELS
-import com.qshlab.daybreak.feed.Claude
+import com.qshlab.daybreak.feed.Ai
+import com.qshlab.daybreak.feed.PROVIDERS
 import com.qshlab.daybreak.feed.FeedEngine
 import com.qshlab.daybreak.feed.RssSource
 import com.qshlab.daybreak.sources.MailAccount
@@ -57,38 +57,53 @@ fun money(usd: Double): String = if (usd < 0.01) "$%.3f".format(usd) else "$%.2f
 const val OUTLOOK_CLIENT_ID = ""
 
 @Composable
-fun ClaudeSection() {
+fun AiSection() {
     val version by Changes.version.collectAsState()
     val cfg = remember(version) { FeedEngine.config() }
-    val hint = remember(version) { Claude.keyHint }
-    val month = remember(version) { Claude.thisMonth() }
+    val provider = remember(version) { Ai.provider(cfg.provider) }
+    val current = remember(version) { Ai.model(cfg) }
+    val hint = remember(version, provider) { Ai.keyHint(provider.id) }
+    val month = remember(version) { Ai.thisMonth() }
     val scope = rememberCoroutineScope()
-    var key by remember { mutableStateOf("") }
-    var test by remember { mutableStateOf<String?>(null) }
+    var key by remember(provider) { mutableStateOf("") }
+    var test by remember(provider) { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
-    Hint("Claude writes your feed and answers you. Only text is sent to Anthropic (email snippets, headlines, your events and tasks); it's not used for training. Your key is kept on your devices and syncs to them encrypted.")
-    Text("API key", fontWeight = FontWeight.SemiBold)
-    Hint(hint?.let { "Saved ($it)" } ?: "Not set — get one at console.anthropic.com → API keys.")
+    Hint("The AI writes your feed and answers you. Only text is sent to it (email snippets, headlines, your events and tasks), straight from this device, with your own key. Keys are kept on your devices and sync to them encrypted.")
+    Text("Provider", fontWeight = FontWeight.SemiBold)
+    for (p in PROVIDERS) Row(Modifier.fillMaxWidth().clickable { FeedEngine.saveConfig(cfg.copy(provider = p.id, model = Ai.models(p.id).first().id)) },
+        verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(provider.id == p.id, { FeedEngine.saveConfig(cfg.copy(provider = p.id, model = Ai.models(p.id).first().id)) })
+        Column {
+            Text(if (p.name == p.company) p.name else "${p.name} (${p.company})")
+            Hint((if (Ai.key(p.id) != null) "Key saved" else "No key yet") + if (!p.webSearch) " · no web searches" else "")
+        }
+    }
+    Text("${provider.name} API key", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+    Hint(hint?.let { "Saved ($it)" } ?: "Not set.")
+    TextButton({ Daybreak.platform.openUrl(provider.keyUrl) }) { Text("Get a key from ${provider.company} →") }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(key, { key = it }, Modifier.weight(1f), placeholder = { Text(if (hint != null) "Replace with a new key" else "sk-ant-…") },
+        OutlinedTextField(key, { key = it }, Modifier.weight(1f), placeholder = { Text(if (hint != null) "Replace with a new key" else provider.keyPrefix + "…") },
             singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
         Spacer(Modifier.width(8.dp))
-        Button({ if (key.trim().startsWith("sk-ant-")) { Claude.key = key.trim(); key = ""; test = null } else test = "That doesn't look like an Anthropic API key (they start with sk-ant-)." },
-            enabled = key.isNotBlank()) { Text("Save") }
+        Button({
+            if (key.trim().startsWith(provider.keyPrefix)) { Ai.setKey(provider.id, key.trim()); key = ""; test = null }
+            else test = "That doesn't look like a ${provider.company} API key (they start with ${provider.keyPrefix})."
+        }, enabled = key.isNotBlank()) { Text("Save") }
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton({ testing = true; test = null; scope.launch {
-            test = withContext(Dispatchers.IO) { runCatching { "✓ ${Claude.model(cfg.model).name} answered: ${Claude.test(cfg.model)}" }.getOrElse { it.message } }; testing = false
+            test = withContext(Dispatchers.IO) { runCatching { "✓ ${current.name} answered: ${Ai.test()}" }.getOrElse { it.message } }; testing = false
         } }, enabled = hint != null && !testing) { Text(if (testing) "Testing…" else "Test connection") }
-        if (hint != null) TextButton({ Claude.key = null }) { Text("Remove key", color = MaterialTheme.colorScheme.error) }
+        if (hint != null) TextButton({ Ai.setKey(provider.id, null) }) { Text("Remove key", color = MaterialTheme.colorScheme.error) }
     }
     test?.let { Hint(it) }
     Text("Model", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
-    for (m in CLAUDE_MODELS) Row(Modifier.fillMaxWidth().clickable { FeedEngine.saveConfig(cfg.copy(model = m.id)) }, verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(cfg.model == m.id, { FeedEngine.saveConfig(cfg.copy(model = m.id)) })
-        Column { Text(m.name); Hint("${m.note} · about " + money(FeedEngine.estimate(m.id)) + " per update") }
+    for (m in Ai.models(provider.id)) Row(Modifier.fillMaxWidth().clickable { FeedEngine.saveConfig(cfg.copy(model = m.id)) }, verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(current.id == m.id, { FeedEngine.saveConfig(cfg.copy(model = m.id)) })
+        Column { Text(m.name); Hint("${m.note} · about " + money(FeedEngine.estimate(m)) + " per update") }
     }
-    Hint("This month (all your devices): ${month.requests} request${if (month.requests == 1) "" else "s"} · about $%.2f".format(month.usd))
+    if (provider.id == "deepseek") Hint("DeepSeek charges double during its peak hours (weekdays 09:00–12:00 and 14:00–18:00 Beijing time); the estimate is an average.")
+    Hint("This month (all your devices, all providers): ${month.requests} request${if (month.requests == 1) "" else "s"} · about $%.2f".format(month.usd))
 }
 
 @Composable
@@ -111,7 +126,7 @@ fun ScheduleSection() {
     val cfg = remember(version) { FeedEngine.config() }
     val s = cfg.schedule
     fun save(n: com.qshlab.daybreak.feed.Schedule) = FeedEngine.saveConfig(cfg.copy(schedule = n))
-    Hint("Each update costs a little (Claude). Only one of your devices writes each update; the others get it through sync.")
+    Hint("Each update costs a little (the AI). Only one of your devices writes each update; the others get it through sync.")
     Menu("Update", when (s.mode) { "manual" -> "Only when I ask"; "interval" -> "Every ${s.everyHours} hours"; else -> "At set times" },
         listOf("At set times" to { save(s.copy(mode = "daily")) }, "Every few hours" to { save(s.copy(mode = "interval")) }, "Only when I ask" to { save(s.copy(mode = "manual")) }))
     when (s.mode) {
@@ -140,7 +155,7 @@ fun ScheduleSection() {
             Switch(login, { login = it; Daybreak.platform.setOpenAtLogin(it) })
         }
     }
-    if (s.mode != "manual") Hint("≈ ${FeedEngine.perDay(s)} update${if (FeedEngine.perDay(s) == 1) "" else "s"} a day · about $%.2f a month with ${Claude.model(cfg.model).name}".format(FeedEngine.perDay(s) * 30 * FeedEngine.estimate(cfg.model)))
+    if (s.mode != "manual") Hint("≈ ${FeedEngine.perDay(s)} update${if (FeedEngine.perDay(s) == 1) "" else "s"} a day · about $%.2f a month with ${Ai.model(cfg).name}".format(FeedEngine.perDay(s) * 30 * FeedEngine.estimate(Ai.model(cfg))))
     if (s.mode != "manual") {
         Row(verticalAlignment = Alignment.CenterVertically) { Text("Notify me when it's ready", Modifier.weight(1f)); Switch(s.notify, { save(s.copy(notify = it)) }) }
         if (s.notify) {
@@ -198,7 +213,8 @@ fun SourcesSection() {
             enabled = feedUrl.startsWith("http")) { Text("Add") }
     }
     Text("Web searches", fontWeight = FontWeight.SemiBold)
-    Hint("Questions Claude researches on the web each update — for what news and feeds don't cover. About 3¢ each per update.")
+    Hint("Questions the AI researches on the web each update — for what news and feeds don't cover. About 3¢ each per update." +
+        if (!Ai.provider().webSearch) " ${Ai.provider().name} can't search the web: these are skipped unless you use Claude or GPT." else "")
     cfg.searches.forEach { q -> Row(verticalAlignment = Alignment.CenterVertically) { Text(q, Modifier.weight(1f)); TextButton({ FeedEngine.saveConfig(cfg.copy(searches = cfg.searches - q)) }) { Text("Remove") } } }
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(search, { search = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text("e.g. road closures near Clementi this week") })

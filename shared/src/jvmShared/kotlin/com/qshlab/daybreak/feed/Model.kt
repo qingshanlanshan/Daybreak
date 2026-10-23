@@ -39,7 +39,8 @@ data class FeedConfig(
     val topics: List<String> = emptyList(),         // news searches (Google News)
     val feeds: List<RssSource> = emptyList(),       // RSS/Atom feeds
     val searches: List<String> = emptyList(),       // asked to Claude's web search each update (costs more)
-    val model: String = "claude-sonnet-5-5",
+    val provider: String = "anthropic",          // anthropic | openai | deepseek (Settings → AI)
+    val model: String = "claude-sonnet-5-5",     // a model of that provider (AI_MODELS)
     val schedule: Schedule = Schedule(),
     val outlookClientId: String = "",
 )
