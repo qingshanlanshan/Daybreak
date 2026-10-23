@@ -50,8 +50,10 @@ object Collector {
             val news = newsJobs.awaitAll().filterNotNull().flatten()
                 .filter { it.published == 0L || it.published > cutoff }
                 .distinctBy { it.title.lowercase().take(60) }
-            // Emails you've already read are left out (the same email read in Apple Mail also drops its notification preview).
-            val mail = if (!cfg.email) emptyList() else SharedMail.merge(mailJobs.awaitAll().filterNotNull().flatten(), since).filter { !it.read }
+            // Emails you've already read or answered are left out (the same email read in Apple Mail also drops its
+            // notification preview); what you sent stays, so the feed knows what you've dealt with.
+            val mail = if (!cfg.email) emptyList() else SharedMail.merge(mailJobs.awaitAll().filterNotNull().flatten(), since)
+                .filter { it.sent || (!it.read && !it.replied) }
             val (events, tasks) = if (cfg.calendar) calendarLines() else emptyList<String>() to emptyList()
             Collected(System.currentTimeMillis(), weather.awaitAll().filterNotNull(), news, mail, events, tasks, errors = errors.toList())
         }

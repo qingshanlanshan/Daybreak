@@ -66,9 +66,9 @@ fun DaybreakApp(startTab: Tab = Tab.Feed, startInSettings: Boolean = false, cale
                 val content: @Composable () -> Unit = {
                     if (settings) androidx.compose.runtime.key(settingsStart) { SettingsScreen(onBack = { settings = false; settingsStart = null }, start = settingsStart) }
                     else when (tab) {
-                        Tab.Feed -> FeedScreen(onSettings = if (wide) null else ({ settings = true }), openSettings = { settingsStart = SettingsPage.Claude; settings = true })
-                        Tab.Calendar -> CalendarScreen(onSettings = if (wide) null else ({ settings = true }), startView = calendarView)
-                        Tab.Tasks -> TasksScreen(onSettings = if (wide) null else ({ settings = true }))
+                        Tab.Feed -> FeedScreen(onSettings = if (wide) null else ({ settingsStart = null; settings = true }), openSettings = { settingsStart = SettingsPage.Claude; settings = true })
+                        Tab.Calendar -> CalendarScreen(onSettings = if (wide) null else ({ settingsStart = null; settings = true }), startView = calendarView)
+                        Tab.Tasks -> TasksScreen(onSettings = if (wide) null else ({ settingsStart = null; settings = true }))
                     }
                 }
                 if (wide) Row(Modifier.fillMaxSize()) {

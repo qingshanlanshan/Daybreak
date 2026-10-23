@@ -16,6 +16,7 @@ fun main() {
     File(dir, "applemail-mac.json").writeJson(MailBox("applemail", "mac", "MacBook", now, true, listOf(
         Mail("NUS", "Prof Tan <tan@university.example>", "Re: Draft chapter 3", now - 2 * h, "Looks good, two comments…"),
         Mail("Gmail", "Mum <mum@example.com>", "Dinner Sunday?", now - 5 * h, "Are you coming…"),
+        Mail("NUS", "me", "Re: Draft chapter 3", now - 1 * h, "Thanks, will fix both.", read = true, sent = true, to = "Prof Tan"),   // your reply
     )))
     File(dir, "notifications-phone.json").writeJson(MailBox("notifications", "phone", "Pixel", now, false, listOf(
         Mail("Outlook", "Prof Tan", "RE: Draft chapter 3", now - 2 * h + 40_000, "Looks good, two"),          // same as Apple Mail's
@@ -26,7 +27,7 @@ fun main() {
     val fromAccount = listOf(Mail("me@example.com", "Mum <mum@example.com>", "Dinner Sunday?", now - 5 * h + 30_000, "Are you coming…"))  // also via IMAP
     val merged = SharedMail.merge(fromAccount, Instant.ofEpochMilli(now - 72 * h))
     merged.forEach { println("${it.account.padEnd(14)} ${it.from.padEnd(28)} ${it.subject}") }
-    val ok = merged.size == 3 && merged.count { it.subject.contains("chapter", true) } == 1 && merged.count { it.subject == "Dinner Sunday?" } == 1 &&
-        merged.any { it.subject == "Password expiry" } && merged.none { it.subject == "Last week" } && merged.first { it.subject.contains("chapter", true) }.account == "NUS"
+    val ok = merged.size == 4 && merged.count { it.sent } == 1 && merged.count { it.subject.contains("chapter", true) && !it.sent } == 1 && merged.count { it.subject == "Dinner Sunday?" } == 1 &&
+        merged.any { it.subject == "Password expiry" } && merged.none { it.subject == "Last week" } && merged.first { it.subject.contains("chapter", true) && !it.sent }.account == "NUS"
     println(if (ok) "MERGE OK" else "MERGE WRONG")
 }

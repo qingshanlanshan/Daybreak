@@ -47,8 +47,32 @@ object FeedAlarms {
     }
 }
 
+/**
+ * An alarm went off: run the update as a short foreground service ("Updating your feed…"). Android lets an
+ * exact alarm start one, and it keeps network access even when the phone is dozing, which a background job
+ * doesn't. If it can't start, fall back to a job.
+ */
 class FeedAlarmReceiver : BroadcastReceiver() {
-    override fun onReceive(ctx: Context, intent: Intent) = FeedAlarms.runJob(ctx)
+    override fun onReceive(ctx: Context, intent: Intent) {
+        runCatching { androidx.core.content.ContextCompat.startForegroundService(ctx, Intent(ctx, FeedService::class.java)) }
+            .onFailure { com.qshlab.daybreak.feed.BackgroundLog.add("Couldn't start the update (${it.javaClass.simpleName}); trying later"); FeedAlarms.runJob(ctx) }
+    }
+}
+
+class FeedService : android.app.Service() {
+    override fun onBind(intent: Intent?) = null
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val n = androidx.core.app.NotificationCompat.Builder(this, "work").setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Updating your feed…").setSilent(true).setPriority(androidx.core.app.NotificationCompat.PRIORITY_MIN).build()
+        if (Build.VERSION.SDK_INT >= 29) startForeground(7, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(7, n)
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            runCatching { FeedEngine.tick() }.onFailure { com.qshlab.daybreak.feed.BackgroundLog.add("Update failed: ${it.message}") }
+            FeedAlarms.schedule(applicationContext)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf(startId)
+        }
+        return START_NOT_STICKY
+    }
 }
 
 class FeedJob : JobService() {
@@ -82,6 +106,7 @@ class SyncJobService : JobService() {
     override fun onStartJob(params: JobParameters): Boolean {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             runCatching { if (com.qshlab.daybreak.Daybreak.sync.config.value != null) com.qshlab.daybreak.Daybreak.sync.runOnce() }
+                .onFailure { com.qshlab.daybreak.feed.BackgroundLog.add("Sync failed: ${it.message}") }
             runCatching { FeedEngine.announce() }
             MonthWidget.refresh(applicationContext)
             jobFinished(params, false)

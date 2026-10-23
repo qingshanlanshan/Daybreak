@@ -27,7 +27,9 @@ data class MailAccount(
 
 @Serializable
 data class Mail(val account: String, val from: String, val subject: String, val received: Long, val snippet: String,
-                val bulk: Boolean = false, val url: String = "", val read: Boolean = false)
+                val bulk: Boolean = false, val url: String = "", val read: Boolean = false,
+                val replied: Boolean = false,                 // you've answered it
+                val sent: Boolean = false, val to: String = "")   // an email you sent (from = you), and to whom
 
 object MailAccounts {
     private val dir get() = File(Daybreak.platform.home, "secrets/mail")
@@ -70,13 +72,34 @@ object MailReader {
                         val from = (m.from?.firstOrNull() as? javax.mail.internet.InternetAddress)?.let { it.personal?.let { p -> "$p <${it.address}>" } ?: it.address } ?: "?"
                         val bulk = m.getHeader("List-Unsubscribe") != null || m.getHeader("Precedence")?.any { it.contains("bulk", true) || it.contains("list", true) } == true
                         val read = m.isSet(javax.mail.Flags.Flag.SEEN)
+                        val replied = m.isSet(javax.mail.Flags.Flag.ANSWERED)
                         // Unread ones only need their text (reading it over IMAP would also mark them read: we open read-only).
-                        Mail(a.email, from, m.subject ?: "(no subject)", (m.receivedDate ?: m.sentDate)?.time ?: 0, if (bulk || read) "" else snippet(m), bulk, read = read)
+                        Mail(a.email, from, m.subject ?: "(no subject)", (m.receivedDate ?: m.sentDate)?.time ?: 0, if (bulk || read) "" else snippet(m), bulk, read = read, replied = replied)
                     }.getOrNull()
                 }
-            } finally { inbox.close(false) }
+            } finally { inbox.close(false) } + runCatching { sentImap(store, a, since) }.getOrDefault(emptyList())
         } finally { runCatching { store.close() } }
     }
+
+    /** What you sent from this account (the folder the server marks \Sent, e.g. Gmail's "Sent Mail"), newest 30. */
+    private fun sentImap(store: javax.mail.Store, a: MailAccount, since: Instant): List<Mail> {
+        val folder = store.defaultFolder.list("*").firstOrNull { f -> (f as? com.sun.mail.imap.IMAPFolder)?.attributes?.any { it.equals("\\Sent", true) } == true }
+            ?: return emptyList()
+        folder.open(javax.mail.Folder.READ_ONLY)
+        try {
+            val msgs = folder.search(javax.mail.search.SentDateTerm(javax.mail.search.ComparisonTerm.GE, Date.from(since)))
+                .sortedByDescending { it.sentDate }.take(30)
+            folder.fetch(msgs.toTypedArray(), javax.mail.FetchProfile().apply { add(javax.mail.FetchProfile.Item.ENVELOPE) })
+            return msgs.mapNotNull { m -> runCatching {
+                val to = m.getRecipients(javax.mail.Message.RecipientType.TO).orEmpty().joinToString(", ") { r ->
+                    (r as? javax.mail.internet.InternetAddress)?.let { it.personal ?: it.address } ?: r.toString() }
+                Mail(a.email, "me", m.subject ?: "(no subject)", m.sentDate?.time ?: 0, ownWords(snippet(m)), read = true, sent = true, to = to)
+            }.getOrNull() }
+        } finally { folder.close(false) }
+    }
+
+    /** A reply without the email it quotes. */
+    fun ownWords(text: String) = text.split(Regex("(On .{4,120} wrote:|-{3,} ?Original Message|发件人[:：]|在 .{4,80}写道[:：])"))[0].trim().take(600)
 
     /** The first ~1000 characters of the text (plain preferred, else HTML stripped). */
     private fun snippet(p: javax.mail.Part): String {
@@ -131,7 +154,9 @@ object Outlook {
         throw IllegalStateException("The sign-in code expired. Try again.")
     }
 
-    fun fetch(a: MailAccount, since: Instant, limit: Int): List<Mail> {
+    fun fetch(a: MailAccount, since: Instant, limit: Int): List<Mail> = inbox(a, since, limit).let { (access, mail) -> mail + runCatching { sent(access, a, since) }.getOrDefault(emptyList()) }
+
+    private fun inbox(a: MailAccount, since: Instant, limit: Int): Pair<String, List<Mail>> {
         val t = post("$AUTH/token", mapOf("grant_type" to "refresh_token", "client_id" to a.clientId, "refresh_token" to a.refreshToken, "scope" to SCOPES))
         t["error"]?.let { throw IllegalStateException("${a.email}: sign in again (${it.jsonPrimitive.content}).") }
         // Microsoft rotates refresh tokens: keep the new one.
@@ -139,7 +164,7 @@ object Outlook {
         val access = t["access_token"]!!.jsonPrimitive.content
         val url = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?\$top=$limit&\$orderby=receivedDateTime%20desc" +
             "&\$filter=receivedDateTime%20ge%20${since}&\$select=subject,from,receivedDateTime,bodyPreview,inferenceClassification,webLink,isRead"
-        return Http.jsonOf(url, mapOf("Authorization" to "Bearer $access")).jsonObject["value"]?.jsonArray.orEmpty().map { m ->
+        return access to Http.jsonOf(url, mapOf("Authorization" to "Bearer $access")).jsonObject["value"]?.jsonArray.orEmpty().map { m ->
             val o = m.jsonObject
             val f = o["from"]?.jsonObject?.get("emailAddress")?.jsonObject
             val name = f?.get("name")?.jsonPrimitive?.content; val addr = f?.get("address")?.jsonPrimitive?.content ?: "?"
@@ -147,6 +172,20 @@ object Outlook {
                 Instant.parse(o["receivedDateTime"]!!.jsonPrimitive.content).toEpochMilli(), o["bodyPreview"]?.jsonPrimitive?.content.orEmpty().take(1000),
                 bulk = o["inferenceClassification"]?.jsonPrimitive?.content == "other", url = o["webLink"]?.jsonPrimitive?.content.orEmpty(),
                 read = o["isRead"]?.jsonPrimitive?.content == "true")
+        }
+    }
+
+    /** What you sent (Sent Items), newest 30. */
+    private fun sent(access: String, a: MailAccount, since: Instant): List<Mail> {
+        val url = "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages?\$top=30&\$orderby=sentDateTime%20desc" +
+            "&\$filter=sentDateTime%20ge%20${since}&\$select=subject,toRecipients,sentDateTime,bodyPreview,webLink"
+        return Http.jsonOf(url, mapOf("Authorization" to "Bearer $access")).jsonObject["value"]?.jsonArray.orEmpty().map { m ->
+            val o = m.jsonObject
+            val to = o["toRecipients"]?.jsonArray.orEmpty().joinToString(", ") { r ->
+                r.jsonObject["emailAddress"]?.jsonObject?.let { e -> e["name"]?.jsonPrimitive?.content ?: e["address"]?.jsonPrimitive?.content }.orEmpty() }
+            Mail(a.email, "me", o["subject"]?.jsonPrimitive?.content ?: "(no subject)", Instant.parse(o["sentDateTime"]!!.jsonPrimitive.content).toEpochMilli(),
+                MailReader.ownWords(o["bodyPreview"]?.jsonPrimitive?.content.orEmpty()), url = o["webLink"]?.jsonPrimitive?.content.orEmpty(),
+                read = true, sent = true, to = to)
         }
     }
 }

@@ -88,6 +88,9 @@ fun FeedScreen(onSettings: (() -> Unit)?, openSettings: () -> Unit) {
     val reactions = remember(version) { FeedEngine.feedback().associateBy { it.title } }
     val placeOrder = remember(version) { com.qshlab.daybreak.sources.Places.resolved().map { it.name } }
     val hasKey = remember(version) { Claude.key != null }
+    // Android's battery optimisation: looked at again every few seconds (it's changed in a system dialog).
+    var limited by remember { mutableStateOf(Daybreak.platform.backgroundLimited) }
+    androidx.compose.runtime.LaunchedEffect(limited) { while (limited) { kotlinx.coroutines.delay(2000); limited = Daybreak.platform.backgroundLimited } }
     val scope = rememberCoroutineScope()
     var sources by remember { mutableStateOf(false) }
     var reply by remember { mutableStateOf<String?>(null) }
@@ -108,6 +111,11 @@ fun FeedScreen(onSettings: (() -> Unit)?, openSettings: () -> Unit) {
                 if (!hasKey) item {
                     Notice("Add your Claude API key to get your feed", "Daybreak reads your email, calendar, weather and news, and Claude writes what matters to you. The key is stored on your devices only.") {
                         Button(openSettings) { Text("Open Settings") }
+                    }
+                }
+                if (hasKey && limited && FeedEngine.config().schedule.mode != "manual") item {
+                    Notice("Let Daybreak update in the background", "Android's battery saving can stop your scheduled feed and its notification while the phone sleeps, until you open the app.") {
+                        Button({ Daybreak.platform.allowBackground() }) { Text("Allow") }
                     }
                 }
                 if (st.running) item { Column(Modifier.widthIn(max = 760.dp).fillMaxWidth()) { Hint(st.step); LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp)) } }
@@ -276,7 +284,8 @@ private fun SourcesSheet(onClose: () -> Unit) {
             Text("Email (${c.mail.size}, last two days)", fontWeight = FontWeight.SemiBold)
             Hint("By mailbox: " + c.mail.groupingBy { it.account.ifBlank { "?" } }.eachCount().entries.sortedByDescending { it.value }.joinToString(" · ") { "${it.key} ${it.value}" })
             c.mail.forEach { m ->
-                Hint((if (c.newSince > 0 && m.received >= c.newSince) "• new · " else "") + (if (m.bulk) "[newsletter] " else "") + m.from.substringBefore(" <") + " — " + m.subject)
+                Hint(if (m.sent) "↗ you → ${m.to.ifBlank { "?" }} — ${m.subject}"
+                    else (if (c.newSince > 0 && m.received >= c.newSince) "• new · " else "") + (if (m.bulk) "[newsletter] " else "") + m.from.substringBefore(" <") + " — " + m.subject)
             }
         }
         if (c.news.isNotEmpty()) { Text("News (${c.news.size})", fontWeight = FontWeight.SemiBold); c.news.forEach { n -> Hint("• [${n.via}] ${n.title} — ${n.source}") } }

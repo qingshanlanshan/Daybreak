@@ -29,6 +29,7 @@ object Alarms {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Reminders", NotificationManager.IMPORTANCE_HIGH).apply { description = "Event alerts and task reminders" })
         nm.createNotificationChannel(NotificationChannel("feed", "Your feed", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "When your feed is updated" })
+        nm.createNotificationChannel(NotificationChannel("work", "Updating", NotificationManager.IMPORTANCE_MIN).apply { description = "Shown briefly while Daybreak updates in the background" })
     }
 
     fun reschedule(ctx: Context) {

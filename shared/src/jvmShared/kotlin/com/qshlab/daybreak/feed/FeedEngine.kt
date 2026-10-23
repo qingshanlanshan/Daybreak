@@ -92,13 +92,17 @@ object FeedEngine {
           payment, a form, an RSVP, preparing for an appointment) and it isn't already among their tasks, suggest
           one task: a short imperative title ("Submit the ethics form") and the due date as "YYYY-MM-DD", or
           "YYYY-MM-DDTHH:MM" when a time is known, or "" when there's no date. Otherwise both "".
-        - Email covers the last two days. Emails marked NEW arrived since the previous feed. Mention an older one only if it
+        - Emails marked SENT BY THE USER are what the user wrote. They show what's already dealt with: if the user
+          replied to something, sent the form, answered the request or confirmed the meeting, it's handled. Don't
+          present it as open or as something to do, and don't make cards about the user's own emails.
+        - Email covers the last two days (unread only: what the user has read or answered is left out). Emails marked NEW arrived since the previous feed. Mention an older one only if it
           still matters now (a deadline coming up, a request still waiting for the user, something happening today).
           [account] is the mailbox it came to (e.g. the user's school or work address, or Gmail).
         - Take the user's reactions to earlier cards seriously: avoid what they marked 👎 (and why), keep doing what
           they liked.
-        - The brief: 2–4 friendly sentences, the day at a glance (what's coming, what needs doing, anything to
-          watch out for). Address the user as "you". No greeting formulas.
+        - The brief: a glance at the day as a short list, 3–6 lines, each starting with "• " and only a few words
+          naming the thing, most important first: "• AI seminar email", "• Rain from 5pm", "• Ethics form due Fri".
+          No explanations, details or sentences: those are in the cards. No greeting.
         - Write in the language the profile asks for; English otherwise.
         - Follow a one-off focus if one is given for this version.
 
@@ -141,7 +145,11 @@ object FeedEngine {
             val age = ago(m.received)
             val new = if (c.newSince > 0 && m.received >= c.newSince) "NEW " else ""
             val to = if (m.account.isNotBlank()) " [${m.account}]" else ""
-            appendLine(if (m.bulk) "M${i + 1} ${new}[newsletter/promotion]$to from ${m.from}: ${m.subject} ($age)" else "M${i + 1} $new$to from ${m.from}: ${m.subject} ($age) — ${m.snippet.take(600)}") } }
+            appendLine(when {
+                m.sent -> "M${i + 1} SENT BY THE USER to ${m.to.ifBlank { "?" }}: ${m.subject} ($age)" + (if (m.snippet.isNotBlank()) " — ${m.snippet.take(400)}" else "")
+                m.bulk -> "M${i + 1} ${new}[newsletter/promotion]$to from ${m.from}: ${m.subject} ($age)"
+                else -> "M${i + 1} $new$to from ${m.from}: ${m.subject} ($age) — ${m.snippet.take(600)}"
+            }) } }
         if (c.news.isNotEmpty()) { appendLine("\n## News"); c.news.forEachIndexed { i, n ->
             appendLine("N${i + 1} [${n.via}] ${n.title} — ${n.source}${if (n.published > 0) " (${ago(n.published)})" else ""}${if (n.summary.isNotBlank()) ": ${n.summary.take(300)}" else ""}") } }
         if (c.web.isNotBlank()) { appendLine("\n## Web search notes"); appendLine(c.web) }
@@ -259,7 +267,10 @@ object FeedEngine {
         announcedFile.writeJson(Announced(f.generatedAt))
         if (last == null || System.currentTimeMillis() - f.generatedAt > 6 * 3600_000L) return   // first run, or an old feed
         val s = config().schedule
-        if (s.notify && Daybreak.sync.deviceId !in s.quietDevices) Daybreak.platform.notify("feed", "Your Daybreak", f.brief.take(240))
+        if (s.notify && Daybreak.sync.deviceId !in s.quietDevices) {
+            Daybreak.platform.notify("feed", "Your Daybreak", f.brief.take(240))
+            BackgroundLog.add("Notified: new feed" + if (f.device != Daybreak.sync.deviceId) " from your other device" else "")
+        }
     }
 
     /** Mail since the last feed (a little overlap), at most three days back. */
@@ -347,6 +358,7 @@ object FeedEngine {
 
     // --- schedule
 
+    private fun hm(t: LocalDateTime): String = "%02d:%02d".format(t.hour, t.minute)
     private fun hm(s: String): LocalTime = runCatching { LocalTime.parse(s) }.getOrDefault(LocalTime.of(6, 0))
 
     /** When feeds should be ready on [day]. */
@@ -393,8 +405,14 @@ object FeedEngine {
             // hasn't by 10 minutes after the time.
             val leaveToMac = !fresh && Daybreak.platform.kind != "mac" && now.isBefore(slot.plusMinutes(10)) &&
                 withContext(Dispatchers.IO) { Daybreak.sync.macAwake() }
+            if (leaveToMac) BackgroundLog.add("${hm(slot)}: waiting for your Mac to write the feed")
             if (!leaveToMac) {
-                if (!fresh && Claude.key != null && withContext(Dispatchers.IO) { Daybreak.sync.tryLease("feed", 600) }) refresh()
+                when {
+                    fresh -> BackgroundLog.add("${hm(slot)}: the feed was already written")
+                    Claude.key == null -> BackgroundLog.add("${hm(slot)}: no Claude key")
+                    !withContext(Dispatchers.IO) { Daybreak.sync.tryLease("feed", 600) } -> BackgroundLog.add("${hm(slot)}: another device is writing it")
+                    else -> refresh().fold({ BackgroundLog.add("${hm(slot)}: wrote the feed") }, { BackgroundLog.add("${hm(slot)}: couldn't write the feed: ${it.message}") })
+                }
                 doneFile.writeJson(done.copy(generated = slot.toString()))
             }
         }

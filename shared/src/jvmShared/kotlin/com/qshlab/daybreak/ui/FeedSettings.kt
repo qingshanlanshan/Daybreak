@@ -151,6 +151,18 @@ fun ScheduleSection() {
             }
             if (Daybreak.sync.config.value != null) Hint("Each of your devices has this switch.")
         }
+        var limited by remember { mutableStateOf(Daybreak.platform.backgroundLimited) }
+        LaunchedEffect(limited) { while (limited) { kotlinx.coroutines.delay(2000); limited = Daybreak.platform.backgroundLimited } }
+        if (limited) {
+            Hint("Android's battery saving may stop updates and notifications while the phone sleeps.", color = MaterialTheme.colorScheme.error)
+            OutlinedButton({ Daybreak.platform.allowBackground() }) { Text("Let Daybreak run in the background") }
+        }
+    }
+    // What happened in the background lately: tells "not updated" apart from "updated but not notified".
+    val log = remember(version) { com.qshlab.daybreak.feed.BackgroundLog.list().takeLast(10).reversed() }
+    if (log.isNotEmpty()) {
+        Text("Recent background activity", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+        for (e in log) Hint(java.text.SimpleDateFormat("d MMM HH:mm").format(java.util.Date(e.at)) + "  " + e.what)
     }
 }
 

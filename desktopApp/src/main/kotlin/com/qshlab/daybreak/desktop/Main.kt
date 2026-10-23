@@ -100,7 +100,7 @@ fun main(args: Array<String>) {
         val b = com.qshlab.daybreak.sources.SharedMail.mine("applemail")
         File(platform.home, "local/mailcheck.txt").apply { parentFile.mkdirs() }.writeText(
             "emails=${b?.items?.size} accounts=${b?.items?.map { it.account.length }?.distinct()} withText=${b?.items?.count { it.snippet.isNotBlank() }} " +
-            "bulk=${b?.items?.count { it.bulk }} unread=${b?.items?.count { !it.read }} links=${b?.items?.count { it.url.startsWith("message://") }} error=${b?.error} ms=${com.qshlab.daybreak.sources.AppleMail.lastTiming}\n")
+            "bulk=${b?.items?.count { it.bulk }} unread=${b?.items?.count { !it.read && !it.sent }} replied=${b?.items?.count { it.replied }} sent=${b?.items?.count { it.sent }} sentWithRecipient=${b?.items?.count { it.sent && it.to.isNotBlank() }} sentWithText=${b?.items?.count { it.sent && it.snippet.isNotBlank() }} links=${b?.items?.count { it.url.startsWith("message://") }} error=${b?.error} ms=${com.qshlab.daybreak.sources.AppleMail.lastTiming}\n")
         kotlin.system.exitProcess(0)
     }
     platform.notifier.start()

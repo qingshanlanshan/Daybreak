@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Scheduled feed updates run as a short foreground service, and may ask to be exempt from battery optimisation. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- A calendar: reminders must fire on time. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
@@ -27,6 +31,7 @@
         <receiver android:name=".FeedAlarmReceiver" android:exported="false" />
         <service android:name=".FeedJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".SyncJobService" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".FeedService" android:exported="false" android:foregroundServiceType="dataSync" />
         <!-- Reads the Outlook and Gmail apps' new-mail notifications, once allowed in Settings → Notification access. -->
         <service android:name=".MailListener" android:exported="true" android:label="Daybreak: new mail for your feed"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">

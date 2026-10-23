@@ -40,6 +40,12 @@ class AndroidPlatform(private val app: Application) : Platform {
     override val appVersion: String = app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "?"
     override val updater = AndroidUpdater(app)
     override val deviceMail = NotificationMail(app)
+    override val backgroundLimited get() = !app.getSystemService(android.os.PowerManager::class.java).isIgnoringBatteryOptimizations(app.packageName)
+    @android.annotation.SuppressLint("BatteryLife")   // a calendar and scheduled feed: updates must run on time
+    override fun allowBackground() {
+        runCatching { app.startActivity(Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${app.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            .onFailure { app.startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
     /** Activities showing now (MainActivity counts itself in onStart/onStop). */
     @Volatile var shown = 0
     override val onScreen get() = shown > 0
@@ -64,7 +70,9 @@ class AndroidPlatform(private val app: Application) : Platform {
     override suspend fun locate(): Result<Pair<Double, Double>> = runCatching {
         val perm = android.Manifest.permission.ACCESS_COARSE_LOCATION
         if (androidx.core.content.ContextCompat.checkSelfPermission(app, perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            val ask = askPermission ?: error("Open Daybreak to allow location.")
+            // Only ask while Daybreak is on screen (Android blocks it from the background); meanwhile the city comes
+            // from the internet connection.
+            val ask = askPermission?.takeIf { onScreen } ?: error("Open Daybreak to allow location.")
             val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                 kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { c -> ask(perm) { c.resumeWith(Result.success(it)) } }
             }

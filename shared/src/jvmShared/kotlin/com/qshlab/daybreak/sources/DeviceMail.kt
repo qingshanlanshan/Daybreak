@@ -96,12 +96,16 @@ object SharedMail {
     fun merge(fromAccounts: List<Mail>, since: Instant): List<Mail> {
         val t0 = since.toEpochMilli()
         val boxes = boxes()
+        val all = fromAccounts + boxes.flatMap { b -> b.items.map { it to b.full } }.filter { it.second }.map { it.first }
+        // Emails you sent stand apart: a reply "Re: X" is not the same email as "X".
+        val sent = all.filter { it.sent && it.received >= t0 }.sortedByDescending { it.received }
+            .fold(mutableListOf<Mail>()) { acc, m -> if (acc.none { same(it, m, 15 * 60_000L) }) acc += m; acc }
         val whole = mutableListOf<Mail>()
-        for (m in (fromAccounts + boxes.filter { it.full }.flatMap { it.items }).sortedByDescending { it.received })
+        for (m in all.filter { !it.sent }.sortedByDescending { it.received })
             if (m.received >= t0 && whole.none { same(it, m, 15 * 60_000L) }) whole += m
         val previews = boxes.filter { !it.full }.flatMap { it.items }.filter { it.received >= t0 }
             .filter { p -> whole.none { same(it, p, 12 * 3600_000L) } }.distinctBy { it.from to norm(it.subject) }
-        return (whole + previews).sortedByDescending { it.received }
+        return (whole + previews + sent).sortedByDescending { it.received }
     }
 
     private fun same(a: Mail, b: Mail, window: Long) = norm(a.subject) == norm(b.subject) && kotlin.math.abs(a.received - b.received) <= window

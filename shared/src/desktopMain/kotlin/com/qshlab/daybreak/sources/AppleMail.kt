@@ -66,7 +66,7 @@ class AppleMail(private val work: File) : DeviceMail {
             else {
                 val r = json.decodeFromString<Reading>(out.trim())
                 lastTiming = r.ms
-                SharedMail.save(kind, true, r.items.map { m -> known[m.url]?.let { k -> m.copy(snippet = k.snippet, bulk = k.bulk, account = k.account) } ?: m })
+                SharedMail.save(kind, true, r.items.map { m -> known[m.url]?.let { k -> m.copy(snippet = k.snippet, bulk = k.bulk, account = k.account, to = k.to) } ?: m })
                 readAt = System.currentTimeMillis()
             }
         } finally {
@@ -107,6 +107,7 @@ class AppleMail(private val work: File) : DeviceMail {
               if (!dates.length) return JSON.stringify({ items: [], ms: ms });
               const subjects = spec.subject(), senders = spec.sender(), ids = spec.messageId();
               let reads = []; try { reads = spec.readStatus(); } catch (e) {}
+              let replied = []; try { replied = spec.wasRepliedTo(); } catch (e) {}
               lap("fields");
               const order = dates.map((d, i) => [d.getTime(), i]).sort((a, b) => b[0] - a[0]).slice(0, limit);
               const out = [];
@@ -124,9 +125,33 @@ class AppleMail(private val work: File) : DeviceMail {
                   fetched++;
                 }
                 out.push({ account: String(account || ""), from: String(senders[i] || "?"), subject: String(subjects[i] || "(no subject)"),
-                           received: time, snippet: body, bulk: bulk, read: reads[i] === true, url: url });
+                           received: time, snippet: body, bulk: bulk, read: reads[i] === true, replied: replied[i] === true, url: url });
               }
               lap("text"); ms.fetched = fetched;
+              // What you sent: shows what you've already dealt with (a reply, a form sent back).
+              try {
+                const sspec = Mail.sentMailbox.messages.whose({ dateSent: { _greaterThan: since } });
+                const sdates = sspec.dateSent();
+                if (sdates.length) {
+                  const ssubj = sspec.subject(), sids = sspec.messageId();
+                  const sorder = sdates.map((d, i) => [d.getTime(), i]).sort((a, b) => b[0] - a[0]).slice(0, 30);
+                  for (const [time, i] of sorder) {
+                    const url = sids[i] ? "message://%3C" + encodeURIComponent(sids[i]) + "%3E" : "";
+                    let body = "", to = "", account = "";
+                    if (!url || !known.has(url)) {
+                      const m = sspec[i];
+                      try { to = m.toRecipients().map((r) => r.name() || r.address()).join(", "); } catch (e) {}
+                      try { account = m.mailbox().account().name(); } catch (e) {}
+                      // Your own words only: cut the quoted email you replied to.
+                      try { body = String(m.content() || "").split(/\n\s*(On .{4,120} wrote:|-{3,} ?Original Message|From: .+\n.*Sent:|发件人[:：]|在 .{4,80}写道[:：])/)[0]
+                        .replace(/\s+/g, " ").trim().slice(0, 600); } catch (e) {}
+                    }
+                    out.push({ account: String(account || ""), from: "me", to: to, subject: String(ssubj[i] || "(no subject)"),
+                               received: time, snippet: body, sent: true, read: true, url: url });
+                  }
+                }
+              } catch (e) {}
+              lap("sent");
               return JSON.stringify({ items: out, ms: ms });
             }
         """.trimIndent()

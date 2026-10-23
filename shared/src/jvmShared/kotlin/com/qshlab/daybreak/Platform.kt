@@ -34,6 +34,10 @@ interface Platform {
     val deviceMail: com.qshlab.daybreak.sources.DeviceMail? get() = null
     /** Android: asks the launcher to put the month widget on the home screen; null where there's none. */
     val addWidget: (() -> Unit)? get() = null
+    /** Android: battery optimisation can stop Daybreak's background updates; true while it applies. */
+    val backgroundLimited: Boolean get() = false
+    /** Asks the system to let Daybreak run in the background (Android's battery optimisation dialog). */
+    fun allowBackground() {}
     /** Whether Daybreak is on screen now (then a new feed needs no notification). */
     val onScreen: Boolean get() = false
     /** Clock style for times. */
